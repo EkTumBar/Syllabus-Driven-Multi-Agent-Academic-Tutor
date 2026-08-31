@@ -62,6 +62,9 @@ def upload_file(
             return public_url_resp
         except Exception as e:
             logger.error("Error uploading %s to Supabase storage: %s", filename, str(e))
+            if settings.ENVIRONMENT != "production":
+                logger.info("Falling back to mock storage URL for %s", filename)
+                return f"https://mock-storage.supabase.co/{bucket}/{unique_filename}"
             raise e
 
     # Fallback for offline development / mock environments

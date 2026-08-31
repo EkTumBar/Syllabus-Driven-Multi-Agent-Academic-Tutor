@@ -7,6 +7,9 @@ from config import settings
 def get_normalized_database_url(url: str) -> str:
     if not url:
         return "sqlite:///./dev_fallback.db"
+    # Convert postgres:// to postgresql:// for SQLAlchemy 2.0 compatibility
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
     # If psycopg2 is requested but not installed, fallback to psycopg (v3)
     if url.startswith("postgresql+psycopg2://"):
         try:

@@ -23,29 +23,37 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url with environment configuration if not explicitly set in main options
-current_main_url = config.get_main_option("sqlalchemy.url")
-if not current_main_url or current_main_url.startswith("postgresql"):
-    if settings.DATABASE_URL:
-        db_url = settings.DATABASE_URL
-        if db_url.startswith("postgresql://"):
-            try:
-                import psycopg2
-            except ImportError:
-                db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
-        elif db_url.startswith("postgresql+psycopg2://"):
-            try:
-                import psycopg2
-            except ImportError:
-                db_url = db_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
-        config.set_main_option("sqlalchemy.url", db_url)
+# Determine target database URL
+configured_url = config.get_main_option("sqlalchemy.url")
+if configured_url and (configured_url.startswith("sqlite") or "test" in configured_url):
+    db_url = configured_url
+elif settings.DATABASE_URL:
+    db_url = settings.DATABASE_URL
+else:
+    db_url = configured_url or "sqlite:///./dev_fallback.db"
+
+if db_url:
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+    if db_url.startswith("postgresql://"):
+        try:
+            import psycopg2
+        except ImportError:
+            db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif db_url.startswith("postgresql+psycopg2://"):
+        try:
+            import psycopg2
+        except ImportError:
+            db_url = db_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+    
+    # Escape percent characters for ConfigParser interpolation safety
+    config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=db_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -57,7 +65,6 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    db_url = config.get_main_option("sqlalchemy.url")
     connect_args = {}
     if db_url and db_url.startswith("sqlite"):
         connect_args = {"check_same_thread": False}
