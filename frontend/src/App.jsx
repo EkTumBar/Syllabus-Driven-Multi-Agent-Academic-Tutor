@@ -3,10 +3,12 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-
 import { AuthProvider, useAuth } from './auth/useAuth';
 import { AuthPage } from './auth/AuthPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AdminRoute } from './admin/AdminRoute';
 import { Navbar } from './components/Navbar';
 import { Home } from './pages/Home';
 import { Course } from './pages/Course';
 import { Progress } from './pages/Progress';
+import { AdminDashboard } from './admin/AdminDashboard';
 
 // Main application layout with persistent navbar
 const AppLayout = () => {
@@ -49,6 +51,11 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/course/:id" element={<Course />} />
               <Route path="/progress" element={<Progress />} />
+
+              {/* Admin Guarded Route */}
+              <Route element={<AdminRoute />}>
+                <Route path="/admin" element={<AdminDashboard />} />
+              </Route>
             </Route>
           </Route>
 
