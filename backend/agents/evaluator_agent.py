@@ -88,11 +88,9 @@ def evaluate_answer(
     if len(recent_attempts) >= 2:
         # Check last two attempts (most recent first)
         last_two_failed = not recent_attempts[0].is_correct and not recent_attempts[1].is_correct
-        low_mastery_threshold = new_score < 0.4
+        low_mastery_threshold = (new_score < 0.4 and attempts_count >= 2)
         if last_two_failed or low_mastery_threshold:
             remediate = True
-    elif not is_correct and new_score < 0.4:
-        remediate = True
 
     # 5. Generate instructional feedback via LLM
     feedback = ""

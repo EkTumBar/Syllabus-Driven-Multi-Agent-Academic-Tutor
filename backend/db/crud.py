@@ -68,6 +68,9 @@ def get_course_by_id(db: Session, course_id: str, user_id: Optional[str] = None)
     return query.first()
 
 
+get_course = get_course_by_id
+
+
 def delete_course(db: Session, course_id: str, user_id: Optional[str] = None) -> bool:
     course = get_course_by_id(db, course_id, user_id=user_id)
     if not course:
@@ -105,6 +108,9 @@ def get_modules_by_course(db: Session, course_id: str) -> List[Module]:
 
 def get_module_by_id(db: Session, module_id: str) -> Optional[Module]:
     return db.query(Module).filter(Module.id == module_id).first()
+
+
+get_module = get_module_by_id
 
 
 # ---------------------------------------------------------
@@ -155,6 +161,9 @@ def get_questions_by_module(db: Session, module_id: str, difficulty: Optional[st
 
 def get_question_by_id(db: Session, question_id: str) -> Optional[Question]:
     return db.query(Question).filter(Question.id == question_id).first()
+
+
+get_question = get_question_by_id
 
 
 # ---------------------------------------------------------
