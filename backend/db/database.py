@@ -4,23 +4,28 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from config import settings
 
 
+import logging
+
+logger = logging.getLogger("database")
+
+
 def get_normalized_database_url(url: str) -> str:
     if not url:
-        return "sqlite:///./dev_fallback.db"
-    # Convert postgres:// to postgresql:// for SQLAlchemy 2.0 compatibility
+        return "sqlite:///./app_data.db"
+    
+    # If in cloud environment and still configured to default localhost, fallback to sqlite
+    if (os.getenv("RENDER") or settings.ENVIRONMENT == "production") and "localhost:5432" in url:
+        logger.warning("DATABASE_URL points to localhost in production. Falling back to local SQLite database.")
+        return "sqlite:///./app_data.db"
+
+    # Convert postgres/postgresql to postgresql+psycopg:// for SQLAlchemy 2.0 & psycopg v3 compatibility
     if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
-    # If psycopg2 is requested but not installed, fallback to psycopg (v3)
-    if url.startswith("postgresql+psycopg2://"):
-        try:
-            import psycopg2
-        except ImportError:
-            url = url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+        url = url.replace("postgres://", "postgresql+psycopg://", 1)
     elif url.startswith("postgresql://"):
-        try:
-            import psycopg2
-        except ImportError:
-            url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    elif url.startswith("postgresql+psycopg2://"):
+        url = url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+
     return url
 
 
@@ -34,7 +39,8 @@ if database_url.startswith("sqlite"):
 engine = create_engine(
     database_url,
     connect_args=connect_args,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    pool_recycle=300
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

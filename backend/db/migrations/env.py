@@ -30,21 +30,19 @@ if configured_url and (configured_url.startswith("sqlite") or "test" in configur
 elif settings.DATABASE_URL:
     db_url = settings.DATABASE_URL
 else:
-    db_url = configured_url or "sqlite:///./dev_fallback.db"
+    db_url = configured_url or "sqlite:///./app_data.db"
+
+# If in cloud environment and still configured to default localhost, fallback to sqlite
+if (os.getenv("RENDER") or settings.ENVIRONMENT == "production") and "localhost:5432" in str(db_url):
+    db_url = "sqlite:///./app_data.db"
 
 if db_url:
     if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql://", 1)
-    if db_url.startswith("postgresql://"):
-        try:
-            import psycopg2
-        except ImportError:
-            db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
+        db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
     elif db_url.startswith("postgresql+psycopg2://"):
-        try:
-            import psycopg2
-        except ImportError:
-            db_url = db_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+        db_url = db_url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
     
     # Escape percent characters for ConfigParser interpolation safety
     config.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
