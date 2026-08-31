@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { GraduationCap, Lock, Mail, UserCheck, ShieldCheck, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from './useAuth';
 
-export default function AuthPage({ onAuthSuccess }) {
+export function AuthPage({ onAuthSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -221,3 +221,5 @@ export default function AuthPage({ onAuthSuccess }) {
     </div>
   );
 }
+
+export default AuthPage;
