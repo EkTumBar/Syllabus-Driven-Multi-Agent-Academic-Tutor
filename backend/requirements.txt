@@ -5,7 +5,8 @@ pydantic-settings==2.7.1
 python-multipart==0.0.20
 sqlalchemy==2.0.36
 alembic==1.14.0
-psycopg2-binary==2.9.10
+psycopg[binary]>=3.2.0
+psycopg2-binary==2.9.10; python_version < '3.14' and sys_platform != 'win32'
 pgvector==0.3.6
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
