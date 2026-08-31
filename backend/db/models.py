@@ -56,6 +56,7 @@ class Course(Base):
     user = relationship("User", back_populates="courses")
     modules = relationship("Module", back_populates="course", cascade="all, delete-orphan", order_by="Module.order_index")
     documents = relationship("Document", back_populates="course", cascade="all, delete-orphan")
+    chunks = relationship("DocumentChunk", back_populates="course", cascade="all, delete-orphan")
     orchestrator_state = relationship("OrchestratorState", back_populates="course", uselist=False, cascade="all, delete-orphan")
 
 
@@ -90,6 +91,25 @@ class Document(Base):
 
     # Relationships
     course = relationship("Course", back_populates="documents")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    course_id = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), index=True, nullable=False)
+    content = Column(Text, nullable=False)
+    embedding_json = Column(JSON, nullable=False)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Composite Indexes
+    __table_args__ = (
+        Index("ix_document_chunks_course_created", "course_id", "created_at"),
+    )
+
+    # Relationships
+    course = relationship("Course", back_populates="chunks")
 
 
 class Question(Base):
