@@ -170,6 +170,9 @@ class MasteryProfileResponse(MasteryProfileBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+MasteryResponse = MasteryProfileResponse
+
+
 # ---------------------------------------------------------
 # Orchestrator State Schemas
 # ---------------------------------------------------------
