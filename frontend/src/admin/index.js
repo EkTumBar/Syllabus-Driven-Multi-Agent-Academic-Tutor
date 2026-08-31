@@ -1,0 +1,2 @@
+// Admin components placeholder
+export {};

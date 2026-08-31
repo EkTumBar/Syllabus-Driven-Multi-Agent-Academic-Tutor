@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: syllabus_tutor_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: syllabustutor
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d syllabustutor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: syllabus_tutor_backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgrespassword@postgres:5432/syllabustutor
+      - PORT=8000
+      - JWT_SECRET=local_dev_jwt_secret_key_change_in_production
+      - GEMINI_API_KEY=mock_or_dev_key
+      - SUPABASE_URL=http://localhost:54321
+      - SUPABASE_KEY=mock_supabase_key
+      - CORS_ORIGIN=http://localhost:5173
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
