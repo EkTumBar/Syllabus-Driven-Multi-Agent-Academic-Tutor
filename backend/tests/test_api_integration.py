@@ -215,3 +215,67 @@ def test_student_delete_course_endpoint(client):
     assert list_res.status_code == 200
     assert len(list_res.json()) == 0
 
+
+def test_delete_course_with_full_child_hierarchy(client):
+    from db.models import Module, Question, Attempt, MasteryProfile, OrchestratorState, Document, DocumentChunk
+
+    # 1. Register student
+    signup = client.post("/auth/signup", json={"email": "hierarchy_student@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup.status_code == 201
+    user_id = signup.json()["user"]["id"]
+    headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
+
+    # 2. Create Course
+    with patch("agents.planner_agent.generate", return_value='{"modules": [{"title": "Bio 1", "order_index": 1, "topics": ["Cells"], "prerequisites": []}]}'):
+        res_course = client.post("/courses", headers=headers, json={"title": "Biology 101", "syllabus_raw": "Cell biology"})
+        assert res_course.status_code == 201
+        course_id = res_course.json()["id"]
+
+    # 3. Populate all child tables directly in DB session to simulate full real-world app state
+    db = TestingSessionLocal()
+    mod = db.query(Module).filter(Module.course_id == course_id).first()
+    assert mod is not None
+
+    q = Question(module_id=mod.id, question_text="What is a cell?", options_json=["A", "B"], correct_answer="A", difficulty="easy")
+    db.add(q)
+    db.commit()
+    db.refresh(q)
+
+    att = Attempt(question_id=q.id, user_id=user_id, answer_given="A", is_correct=True)
+    mp = MasteryProfile(module_id=mod.id, user_id=user_id, topic="Cells", score_0to1=0.9, attempts_count=1)
+    orch = OrchestratorState(course_id=course_id, user_id=user_id, current_module="Bio 1", status="active")
+    doc = Document(course_id=course_id, filename="cells.pdf", storage_url="https://supabase.co/cells.pdf")
+    chk = DocumentChunk(course_id=course_id, content="Cells are the basic building blocks", embedding_json=[0.1, 0.2])
+
+    db.add_all([att, mp, orch, doc, chk])
+    db.commit()
+
+    # Verify rows exist
+    assert db.query(Attempt).filter(Attempt.question_id == q.id).count() == 1
+    assert db.query(MasteryProfile).filter(MasteryProfile.module_id == mod.id).count() == 1
+    assert db.query(OrchestratorState).filter(OrchestratorState.course_id == course_id).count() == 1
+    assert db.query(Document).filter(Document.course_id == course_id).count() == 1
+    assert db.query(DocumentChunk).filter(DocumentChunk.course_id == course_id).count() == 1
+    db.close()
+
+    # 4. Student deletes course through the API endpoint
+    delete_res = client.delete(f"/courses/{course_id}", headers=headers)
+    assert delete_res.status_code == 200
+    assert delete_res.json()["course_id"] == course_id
+
+    # 5. Verify ALL child records are completely wiped without any foreign key integrity errors
+    db2 = TestingSessionLocal()
+    assert db2.query(Course).filter(Course.id == course_id).count() == 0
+    assert db2.query(Module).filter(Module.course_id == course_id).count() == 0
+    assert db2.query(Question).filter(Question.id == q.id).count() == 0
+    assert db2.query(Attempt).filter(Attempt.question_id == q.id).count() == 0
+    assert db2.query(MasteryProfile).filter(MasteryProfile.module_id == mod.id).count() == 0
+    assert db2.query(OrchestratorState).filter(OrchestratorState.course_id == course_id).count() == 0
+    assert db2.query(Document).filter(Document.course_id == course_id).count() == 0
+    assert db2.query(DocumentChunk).filter(DocumentChunk.course_id == course_id).count() == 0
+
+    # Verify user still exists
+    assert db2.query(User).filter(User.id == user_id).count() == 1
+    db2.close()
+
+

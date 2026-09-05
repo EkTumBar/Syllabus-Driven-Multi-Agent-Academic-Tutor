@@ -160,7 +160,15 @@ def delete_course_endpoint(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this course")
 
     title = course.title
-    success = crud.delete_course(db, course_id=course_id)
+    try:
+        success = crud.delete_course(db, course_id=course_id)
+    except Exception as e:
+        logger.error("Failed to delete course %s: %s", course_id, str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete course: {str(e)}"
+        )
+
     if not success:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete course")
 

@@ -54,10 +54,10 @@ class Course(Base):
 
     # Relationships
     user = relationship("User", back_populates="courses")
-    modules = relationship("Module", back_populates="course", cascade="all, delete-orphan", order_by="Module.order_index")
-    documents = relationship("Document", back_populates="course", cascade="all, delete-orphan")
-    chunks = relationship("DocumentChunk", back_populates="course", cascade="all, delete-orphan")
-    orchestrator_state = relationship("OrchestratorState", back_populates="course", uselist=False, cascade="all, delete-orphan")
+    modules = relationship("Module", back_populates="course", cascade="all, delete-orphan", passive_deletes=True, order_by="Module.order_index")
+    documents = relationship("Document", back_populates="course", cascade="all, delete-orphan", passive_deletes=True)
+    chunks = relationship("DocumentChunk", back_populates="course", cascade="all, delete-orphan", passive_deletes=True)
+    orchestrator_state = relationship("OrchestratorState", back_populates="course", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
 
 
 class Module(Base):
@@ -76,8 +76,8 @@ class Module(Base):
 
     # Relationships
     course = relationship("Course", back_populates="modules")
-    questions = relationship("Question", back_populates="module", cascade="all, delete-orphan")
-    mastery_records = relationship("MasteryProfile", back_populates="module", cascade="all, delete-orphan")
+    questions = relationship("Question", back_populates="module", cascade="all, delete-orphan", passive_deletes=True)
+    mastery_records = relationship("MasteryProfile", back_populates="module", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class Document(Base):
@@ -129,7 +129,7 @@ class Question(Base):
 
     # Relationships
     module = relationship("Module", back_populates="questions")
-    attempts = relationship("Attempt", back_populates="question", cascade="all, delete-orphan")
+    attempts = relationship("Attempt", back_populates="question", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class Attempt(Base):

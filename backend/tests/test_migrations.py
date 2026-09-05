@@ -37,6 +37,7 @@ def test_alembic_upgrade_and_downgrade(setup_migration_db):
         "courses",
         "modules",
         "documents",
+        "document_chunks",
         "questions",
         "attempts",
         "mastery_profile",

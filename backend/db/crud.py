@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Any
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, desc
 from db.models import (
@@ -6,12 +7,15 @@ from db.models import (
     Course,
     Module,
     Document,
+    DocumentChunk,
     Question,
     Attempt,
     MasteryProfile,
     OrchestratorState,
     AdminLog
 )
+
+logger = logging.getLogger("crud")
 
 
 # ---------------------------------------------------------
@@ -72,12 +76,50 @@ get_course = get_course_by_id
 
 
 def delete_course(db: Session, course_id: str, user_id: Optional[str] = None) -> bool:
+    """
+    Deletes a course and cleanly deletes all child records in dependency order:
+    Attempts -> Questions -> MasteryProfile -> Modules -> OrchestratorState ->
+    DocumentChunks -> Documents -> Course.
+    """
     course = get_course_by_id(db, course_id, user_id=user_id)
     if not course:
         return False
-    db.delete(course)
-    db.commit()
-    return True
+
+    try:
+        # 1. Cleanly delete child records in reverse dependency order
+        module_rows = db.query(Module.id).filter(Module.course_id == course_id).all()
+        module_ids = [m[0] for m in module_rows]
+
+        if module_ids:
+            question_rows = db.query(Question.id).filter(Question.module_id.in_(module_ids)).all()
+            question_ids = [q[0] for q in question_rows]
+
+            if question_ids:
+                db.query(Attempt).filter(Attempt.question_id.in_(question_ids)).delete(synchronize_session=False)
+                db.query(Question).filter(Question.id.in_(question_ids)).delete(synchronize_session=False)
+
+            db.query(MasteryProfile).filter(MasteryProfile.module_id.in_(module_ids)).delete(synchronize_session=False)
+            db.query(Module).filter(Module.id.in_(module_ids)).delete(synchronize_session=False)
+
+        db.query(OrchestratorState).filter(OrchestratorState.course_id == course_id).delete(synchronize_session=False)
+
+        try:
+            db.query(DocumentChunk).filter(DocumentChunk.course_id == course_id).delete(synchronize_session=False)
+        except Exception as chunk_err:
+            logger.warning("Could not delete from document_chunks table: %s", str(chunk_err))
+            db.rollback()
+
+        db.query(Document).filter(Document.course_id == course_id).delete(synchronize_session=False)
+
+        # 2. Delete the course itself via ORM session delete
+        db.delete(course)
+        db.commit()
+        return True
+    except Exception as e:
+        logger.error("Explicit deletion failed for course %s: %s", course_id, str(e), exc_info=True)
+        db.rollback()
+        raise e
+
 
 
 # ---------------------------------------------------------

@@ -31,6 +31,16 @@ def run_db_migrations():
         )
         logger.warning("Continuing startup so the web service remains operational.")
 
+    # Also run create_all idempotently to ensure all declared tables exist
+    try:
+        from db.database import engine, Base
+        import db.models  # noqa: F401
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database schema tables verified successfully.")
+    except Exception as e:
+        logger.warning("Base.metadata.create_all notice: %s", str(e))
+
 
 if __name__ == "__main__":
     run_db_migrations()
+
