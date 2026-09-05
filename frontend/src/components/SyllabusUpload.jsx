@@ -32,10 +32,11 @@ Module 3: Sequence Modeling & Attention Mechanisms
     const file = e.target.files[0];
     if (!file) return;
 
-    const validExtensions = ['.pdf', '.docx', '.png', '.jpg', '.jpeg'];
+    const validExtensions = ['.pdf', '.doc', '.docx', '.png', '.jpg', '.jpeg'];
     const fileName = file.name.toLowerCase();
     const isValid = validExtensions.some(ext => fileName.endsWith(ext)) ||
       file.type === 'application/pdf' ||
+      file.type === 'application/msword' ||
       file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       file.type.startsWith('image/');
 
@@ -43,7 +44,7 @@ Module 3: Sequence Modeling & Attention Mechanisms
       setAttachedFile(file);
       setError('');
     } else {
-      setError('Please select a supported document or image (.pdf, .docx, .png, .jpg, .jpeg).');
+      setError('Please select a supported document or image (.pdf, .doc, .docx, .png, .jpg, .jpeg).');
     }
   };
 
@@ -56,7 +57,7 @@ Module 3: Sequence Modeling & Attention Mechanisms
     }
 
     if (!syllabusRaw.trim() && !attachedFile) {
-      setError('Please provide syllabus content or upload a document (.pdf, .docx, or image).');
+      setError('Please provide syllabus content or upload a document (.pdf, .doc, .docx, or image).');
       return;
     }
 
@@ -107,7 +108,7 @@ Module 3: Sequence Modeling & Attention Mechanisms
           <div>
             <h2 className="text-lg font-bold text-slate-900">Create New Course</h2>
             <p className="text-xs text-slate-500">
-              Paste your syllabus or upload a document/image (.pdf, .docx, .png, .jpg).
+              Paste your syllabus or upload a document/image (.pdf, .doc, .docx, .png, .jpg).
             </p>
           </div>
         </div>
@@ -173,12 +174,12 @@ Module 3: Sequence Modeling & Attention Mechanisms
         {/* File Upload: PDF, Word DOCX, Images */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-            Attach Document or Image (.pdf, .docx, .png, .jpg, .jpeg)
+            Attach Document or Image (.pdf, .doc, .docx, .png, .jpg, .jpeg)
           </label>
           <div className="relative border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-5 transition-colors text-center cursor-pointer bg-slate-50/50 hover:bg-indigo-50/20">
             <input
               type="file"
-              accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
+              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
               onChange={handleFileChange}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
@@ -210,7 +211,7 @@ Module 3: Sequence Modeling & Attention Mechanisms
                     Click or drag & drop syllabus document or image
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    Supported: PDF, Word (.docx), PNG, JPG up to 25 MB
+                    Supported: PDF, Word (.doc, .docx), PNG, JPG up to 25 MB
                   </span>
                 </>
               )}

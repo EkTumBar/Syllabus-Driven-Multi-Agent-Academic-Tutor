@@ -345,4 +345,30 @@ def test_create_course_validation_empty_content(client):
     assert res2.status_code == 400
 
 
+def test_create_course_with_doc_upload_without_manual_text(client):
+    signup = client.post("/auth/signup", json={"email": "doc_student@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup.status_code == 201
+    headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
+
+    # Simulate a .doc binary stream with UTF-16LE text runs typical of Word 97-2003
+    doc_content = "Module 1: Operating Systems & Kernel Architecture\nModule 2: File Systems and Virtual Memory"
+    fake_doc = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 32 + doc_content.encode("utf-16le")
+
+    mock_plan = '{"modules": [{"title": "Module 1: Operating Systems", "order_index": 1, "topics": ["Kernel"], "prerequisites": []}]}'
+
+    with patch("agents.planner_agent.generate", return_value=mock_plan):
+        res = client.post(
+            "/courses",
+            headers=headers,
+            data={"title": "CS301: Operating Systems"},
+            files={"file": ("syllabus.doc", fake_doc, "application/msword")}
+        )
+        assert res.status_code == 201
+        data = res.json()
+        assert data["title"] == "CS301: Operating Systems"
+        assert "Operating Systems" in data["syllabus_raw"]
+        assert len(data["modules"]) == 1
+
+
+
 

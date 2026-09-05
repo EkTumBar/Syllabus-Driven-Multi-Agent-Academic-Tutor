@@ -8,7 +8,14 @@ from db.models import User, Course
 from auth.dependencies import get_current_user
 from agents.planner_agent import plan_syllabus
 from storage.file_storage import upload_file
-from rag.ingest import extract_text_from_pdf, extract_text_from_docx, process_pdf, process_docx
+from rag.ingest import (
+    extract_text_from_pdf,
+    extract_text_from_docx,
+    extract_text_from_doc,
+    process_pdf,
+    process_docx,
+    process_doc,
+)
 from rag.embeddings import embed_batch
 from rag.vector_store import add_chunks
 from schemas.pydantic_models import CourseCreate, CourseResponse, ModuleResponse
@@ -74,6 +81,18 @@ async def create_course_endpoint(
                     if not syllabus_raw:
                         syllabus_raw = f"[Course syllabus uploaded from Word document: {filename}]"
 
+            elif lower_name.endswith(".doc") or "msword" in mime_type:
+                try:
+                    doc_text = extract_text_from_doc(file_bytes)
+                    if not syllabus_raw:
+                        syllabus_raw = doc_text
+                    elif doc_text:
+                        syllabus_raw = f"{syllabus_raw}\n\n[Extracted from {filename}]:\n{doc_text}"
+                except Exception as doc_err:
+                    logger.warning("Failed to extract text from doc: %s", str(doc_err))
+                    if not syllabus_raw:
+                        syllabus_raw = f"[Course syllabus uploaded from Word document: {filename}]"
+
             elif lower_name.endswith(".pdf") or mime_type == "application/pdf":
                 try:
                     pdf_text = extract_text_from_pdf(file_bytes)
@@ -101,7 +120,7 @@ async def create_course_endpoint(
     if not syllabus_raw and not multimodal_files:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please provide syllabus content or upload a document (.pdf, .docx, or image)."
+            detail="Please provide syllabus content or upload a document (.pdf, .doc, .docx, or image)."
         )
 
     # 1. Create course record scoped to current user
@@ -138,6 +157,8 @@ async def create_course_endpoint(
                 chunks = process_pdf(file_bytes=file_bytes, course_id=course.id, filename=filename)
             elif lower_name.endswith(".docx"):
                 chunks = process_docx(file_bytes=file_bytes, course_id=course.id, filename=filename)
+            elif lower_name.endswith(".doc"):
+                chunks = process_doc(file_bytes=file_bytes, course_id=course.id, filename=filename)
             
             if chunks:
                 texts = [c["text"] for c in chunks]
@@ -226,9 +247,16 @@ async def upload_course_document(
         storage_url=storage_url
     )
 
-    # 3. Process PDF into chunks
+    # 3. Process document into chunks
     try:
-        chunks = process_pdf(file_bytes=file_bytes, course_id=course.id, filename=filename)
+        lower_name = filename.lower()
+        if lower_name.endswith(".docx"):
+            chunks = process_docx(file_bytes=file_bytes, course_id=course.id, filename=filename)
+        elif lower_name.endswith(".doc"):
+            chunks = process_doc(file_bytes=file_bytes, course_id=course.id, filename=filename)
+        else:
+            chunks = process_pdf(file_bytes=file_bytes, course_id=course.id, filename=filename)
+
         if chunks:
             # Generate embeddings
             texts = [c["text"] for c in chunks]
@@ -239,7 +267,7 @@ async def upload_course_document(
             # Store chunks in vector store
             add_chunks(db, course_id=course.id, chunks_with_embeddings=chunks)
     except Exception as e:
-        logger.error("Error indexing PDF chunks into vector store: %s", str(e))
+        logger.error("Error indexing document chunks into vector store: %s", str(e))
 
     return {
         "message": f"Successfully processed and indexed {filename}",
