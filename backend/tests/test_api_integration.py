@@ -174,3 +174,44 @@ def test_full_api_flow_and_role_gating(client):
     final_log_count = db.query(AdminLog).count()
     assert final_log_count >= initial_log_count + 3
     db.close()
+
+
+def test_student_delete_course_endpoint(client):
+    # 1. Register student A and student B
+    signup_a = client.post("/auth/signup", json={"email": "student_a@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup_a.status_code == 201
+    headers_a = {"Authorization": f"Bearer {signup_a.json()['access_token']}"}
+
+    signup_b = client.post("/auth/signup", json={"email": "student_b@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup_b.status_code == 201
+    headers_b = {"Authorization": f"Bearer {signup_b.json()['access_token']}"}
+
+    # 2. Student A creates a course
+    with patch("agents.planner_agent.generate", return_value='{"modules": [{"title": "Mod 1", "order_index": 1, "topics": [], "prerequisites": []}]}'):
+        res_course = client.post("/courses", headers=headers_a, json={"title": "Math 101", "syllabus_raw": "Intro to Math"})
+        assert res_course.status_code == 201
+        course_id = res_course.json()["id"]
+
+    # 3. Student B tries to delete Student A's course -> 403 Forbidden
+    res_b_delete = client.delete(f"/courses/{course_id}", headers=headers_b)
+    assert res_b_delete.status_code == 403
+    assert res_b_delete.json()["detail"] == "Access denied to this course"
+
+    # 4. Student A tries to delete non-existent course -> 404
+    res_404 = client.delete("/courses/non-existent-id", headers=headers_a)
+    assert res_404.status_code == 404
+
+    # 5. Student A deletes own course -> 200 OK
+    res_a_delete = client.delete(f"/courses/{course_id}", headers=headers_a)
+    assert res_a_delete.status_code == 200
+    assert res_a_delete.json()["course_id"] == course_id
+
+    # 6. Verify course is gone
+    get_res = client.get(f"/courses/{course_id}", headers=headers_a)
+    assert get_res.status_code == 404
+
+    # Verify courses list is empty for student A
+    list_res = client.get("/courses", headers=headers_a)
+    assert list_res.status_code == 200
+    assert len(list_res.json()) == 0
+

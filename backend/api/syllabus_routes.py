@@ -143,3 +143,29 @@ def list_course_documents(
 
     docs = crud.get_documents_by_course(db, course_id=course_id)
     return docs
+
+
+@router.delete("/{course_id}")
+def delete_course_endpoint(
+    course_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Deletes a course and cascades deletion to all associated modules, quizzes, and materials. Scoped to owner or admin."""
+    course = crud.get_course_by_id(db, course_id=course_id)
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+    if course.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this course")
+
+    title = course.title
+    success = crud.delete_course(db, course_id=course_id)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to delete course")
+
+    return {
+        "message": f"Course '{title}' deleted successfully",
+        "course_id": course_id
+    }
+

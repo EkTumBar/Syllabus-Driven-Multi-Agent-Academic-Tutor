@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { QuizPanel } from '../components/QuizPanel';
 import { ConceptExplainer } from '../components/ConceptExplainer';
@@ -11,16 +11,23 @@ import {
   Loader2, 
   AlertCircle,
   Sparkles,
-  CheckCircle
+  CheckCircle,
+  Trash2,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 
 export const Course = () => {
   const { id: courseId } = useParams();
+  const navigate = useNavigate();
   const [course, setCourse] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeExplainTopic, setActiveExplainTopic] = useState('');
   const [activeExplainQuestion, setActiveExplainQuestion] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     const fetchCourseDetails = async () => {
@@ -43,6 +50,20 @@ export const Course = () => {
   const handleExplainTopic = (questionText, topic) => {
     setActiveExplainQuestion(questionText || '');
     setActiveExplainTopic(topic || 'Current Topic');
+  };
+
+  const handleDeleteCourse = async () => {
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      await apiClient.delete(`/courses/${courseId}`);
+      navigate('/');
+    } catch (err) {
+      console.error('Failed to delete course:', err);
+      setDeleteError(err.response?.data?.detail || 'Failed to delete course. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (loading) {
@@ -90,7 +111,7 @@ export const Course = () => {
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-semibold">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
           <span className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1.5">
             <Layers className="w-3.5 h-3.5 text-indigo-500" />
             <span>{modules.length} Modules</span>
@@ -99,6 +120,18 @@ export const Course = () => {
             <FileText className="w-3.5 h-3.5 text-purple-500" />
             <span>{documents.length} PDF Documents</span>
           </span>
+          <button
+            type="button"
+            onClick={() => {
+              setShowDeleteModal(true);
+              setDeleteError('');
+            }}
+            className="px-3 py-1.5 rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100/80 border border-rose-200/60 transition flex items-center gap-1.5 font-bold cursor-pointer"
+            title="Delete this course"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete Course</span>
+          </button>
         </div>
       </div>
 
@@ -151,6 +184,67 @@ export const Course = () => {
           />
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteError('');
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-slate-900">Delete Course</h3>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Are you sure you want to permanently delete <strong className="text-slate-800 font-semibold">{course.title}</strong>? All generated modules, quiz questions, attempts, and indexed lecture documents will be deleted. This action cannot be undone.
+              </p>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteError('');
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteCourse}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              >
+                {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isDeleting ? 'Deleting...' : 'Delete Course'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
