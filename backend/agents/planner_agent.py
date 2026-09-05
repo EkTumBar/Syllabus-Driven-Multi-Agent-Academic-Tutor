@@ -9,38 +9,45 @@ logger = logging.getLogger("planner_agent")
 logger.setLevel(logging.INFO)
 
 PLANNER_SYSTEM_PROMPT = """You are an expert Academic Curriculum Planner.
-Your task is to analyze the provided course syllabus text and break it down into a structured, chronological list of learning modules.
+Your task is to analyze the provided course syllabus text, document, or image to infer the course outline, topics, and learning objectives automatically, and break them down into a structured, chronological list of learning modules.
 
 Rules:
-1. Extract modules in logical sequential learning order.
-2. For each module, identify:
-   - "title": Concise module title (e.g. "Module 1: Foundations of Classical Mechanics")
+1. Carefully analyze any provided text, attached document (PDF/Word), or image (screenshot/photo of a syllabus or schedule) to infer the comprehensive curriculum structure, key topics, and learning goals.
+2. Extract modules in logical sequential learning order.
+3. For each module, identify:
+   - "title": Concise, informative module title (e.g. "Module 1: Foundations of Classical Mechanics")
    - "order_index": Sequential integer starting from 1
-   - "topics": Array of key concepts/subtopics covered
+   - "topics": Array of key concepts, subtopics, and competencies covered
    - "prerequisites": Array of prerequisite module titles or topics needed before this module
-3. Return STRICTLY a valid JSON object with the key "modules" containing the list of modules.
+4. Return STRICTLY a valid JSON object with the key "modules" containing the list of modules.
 """
 
 
 def plan_syllabus(
-    syllabus_raw: str,
+    syllabus_raw: str = "",
     course_id: Optional[str] = None,
-    db: Optional[Session] = None
+    db: Optional[Session] = None,
+    files: Optional[List[Any]] = None
 ) -> List[Dict[str, Any]]:
     """
-    Parses raw syllabus text using Gemini and returns an ordered list of module dicts.
+    Parses raw syllabus text and/or multimodal documents/images using Gemini
+    and returns an ordered list of module dicts.
     If course_id and db session are provided, saves the modules to the database.
     """
-    if not syllabus_raw or not syllabus_raw.strip():
-        raise ValueError("Syllabus text cannot be empty.")
+    if (not syllabus_raw or not syllabus_raw.strip()) and not files:
+        raise ValueError("Syllabus text or attached document cannot be empty.")
 
-    prompt = f"Please extract the ordered learning modules from the following syllabus:\n\n{syllabus_raw}"
+    if syllabus_raw and syllabus_raw.strip():
+        prompt = f"Please analyze the following syllabus content and attached materials to infer the course outline and extract ordered learning modules:\n\n{syllabus_raw}"
+    else:
+        prompt = "Please analyze the attached document or image to infer the course outline, topics, and objectives, and extract structured, ordered learning modules."
 
     response_text = generate(
         prompt=prompt,
         system=PLANNER_SYSTEM_PROMPT,
         json_mode=True,
-        temperature=0.2
+        temperature=0.2,
+        files=files
     )
 
     try:

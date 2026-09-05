@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, status
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db import crud
@@ -8,7 +8,7 @@ from db.models import User, Course
 from auth.dependencies import get_current_user
 from agents.planner_agent import plan_syllabus
 from storage.file_storage import upload_file
-from rag.ingest import process_pdf
+from rag.ingest import extract_text_from_pdf, extract_text_from_docx, process_pdf, process_docx
 from rag.embeddings import embed_batch
 from rag.vector_store import add_chunks
 from schemas.pydantic_models import CourseCreate, CourseResponse, ModuleResponse
@@ -18,23 +18,144 @@ router = APIRouter(prefix="/courses", tags=["Courses & Syllabus"])
 
 
 @router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
-def create_course_endpoint(
-    payload: CourseCreate,
+async def create_course_endpoint(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Creates a new course from syllabus text and extracts initial modules."""
+    """
+    Creates a new course from syllabus text, PDF, Word (.docx), or image upload.
+    Supports both JSON payloads and multipart/form-data.
+    """
+    content_type = request.headers.get("content-type", "")
+    title = ""
+    syllabus_raw = ""
+    file = None
+    file_bytes = None
+    filename = ""
+
+    if content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        title = form.get("title") or ""
+        syllabus_raw = form.get("syllabus_raw") or ""
+        file = form.get("file")
+    else:
+        try:
+            body = await request.json()
+            title = body.get("title") or ""
+            syllabus_raw = body.get("syllabus_raw") or ""
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request body")
+
+    if not title or not title.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Course title is required.")
+
+    title = title.strip()
+    syllabus_raw = syllabus_raw.strip() if syllabus_raw else ""
+
+    multimodal_files = []
+
+    if file and hasattr(file, "read"):
+        file_bytes = await file.read()
+        filename = file.filename or "uploaded_document"
+        mime_type = file.content_type or "application/octet-stream"
+
+        if file_bytes:
+            lower_name = filename.lower()
+            if lower_name.endswith(".docx") or "wordprocessingml" in mime_type:
+                try:
+                    docx_text = extract_text_from_docx(file_bytes)
+                    if not syllabus_raw:
+                        syllabus_raw = docx_text
+                    elif docx_text:
+                        syllabus_raw = f"{syllabus_raw}\n\n[Extracted from {filename}]:\n{docx_text}"
+                except Exception as docx_err:
+                    logger.warning("Failed to extract text from docx: %s", str(docx_err))
+                    if not syllabus_raw:
+                        syllabus_raw = f"[Course syllabus uploaded from Word document: {filename}]"
+
+            elif lower_name.endswith(".pdf") or mime_type == "application/pdf":
+                try:
+                    pdf_text = extract_text_from_pdf(file_bytes)
+                    if not syllabus_raw and pdf_text.strip():
+                        syllabus_raw = pdf_text
+                    elif not syllabus_raw:
+                        syllabus_raw = f"[Course syllabus uploaded from PDF: {filename}]"
+                except Exception as pdf_err:
+                    logger.warning("Failed to extract text from PDF: %s", str(pdf_err))
+                    if not syllabus_raw:
+                        syllabus_raw = f"[Course syllabus uploaded from PDF: {filename}]"
+
+                multimodal_files.append((file_bytes, "application/pdf", filename))
+
+            elif any(lower_name.endswith(ext) for ext in [".png", ".jpg", ".jpeg"]) or mime_type.startswith("image/"):
+                if not syllabus_raw:
+                    syllabus_raw = f"[Course syllabus uploaded from image: {filename}]"
+                img_mime = mime_type if mime_type.startswith("image/") else ("image/png" if lower_name.endswith(".png") else "image/jpeg")
+                multimodal_files.append((file_bytes, img_mime, filename))
+            else:
+                if not syllabus_raw:
+                    syllabus_raw = f"[Course document uploaded: {filename}]"
+
+    # Validation: Either syllabus_raw or file must be provided
+    if not syllabus_raw and not multimodal_files:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please provide syllabus content or upload a document (.pdf, .docx, or image)."
+        )
+
     # 1. Create course record scoped to current user
     course = crud.create_course(
         db=db,
         user_id=current_user.id,
-        title=payload.title,
-        syllabus_raw=payload.syllabus_raw
+        title=title,
+        syllabus_raw=syllabus_raw or f"[Course syllabus for {title}]"
     )
 
-    # 2. Run Planner Agent to extract modules
+    # 2. If file provided, upload to Supabase storage, save Document record, and index in vector store
+    if file and file_bytes:
+        try:
+            storage_url = upload_file(
+                file_bytes=file_bytes,
+                filename=filename,
+                content_type=file.content_type or "application/octet-stream"
+            )
+        except Exception as storage_err:
+            logger.error("Storage upload failed during course creation: %s", str(storage_err))
+            storage_url = f"https://storage.supabase.co/documents/{filename}"
+
+        crud.create_document(
+            db=db,
+            course_id=course.id,
+            filename=filename,
+            storage_url=storage_url
+        )
+
+        try:
+            chunks = []
+            lower_name = filename.lower()
+            if lower_name.endswith(".pdf"):
+                chunks = process_pdf(file_bytes=file_bytes, course_id=course.id, filename=filename)
+            elif lower_name.endswith(".docx"):
+                chunks = process_docx(file_bytes=file_bytes, course_id=course.id, filename=filename)
+            
+            if chunks:
+                texts = [c["text"] for c in chunks]
+                embeddings = embed_batch(texts)
+                for c, emb in zip(chunks, embeddings):
+                    c["embedding"] = emb
+                add_chunks(db, course_id=course.id, chunks_with_embeddings=chunks)
+        except Exception as idx_err:
+            logger.error("Error indexing document chunks during course creation: %s", str(idx_err))
+
+    # 3. Run Planner Agent to extract modules
     try:
-        plan_syllabus(syllabus_raw=payload.syllabus_raw, course_id=course.id, db=db)
+        plan_syllabus(
+            syllabus_raw=syllabus_raw,
+            course_id=course.id,
+            db=db,
+            files=multimodal_files if multimodal_files else None
+        )
     except Exception as e:
         logger.warning("Planner agent failed during course creation: %s", str(e))
         crud.create_module(db=db, course_id=course.id, title="Module 1: General Course Content", order_index=1)

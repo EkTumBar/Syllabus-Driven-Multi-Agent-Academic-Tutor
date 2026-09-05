@@ -71,3 +71,43 @@ def process_pdf(
         })
 
     return processed_chunks
+
+
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    """Extracts text from DOCX byte content including paragraphs and tables."""
+    import docx
+    doc = docx.Document(io.BytesIO(file_bytes))
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    table_rows = []
+    for table in doc.tables:
+        for row in table.rows:
+            row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if row_text:
+                table_rows.append(" | ".join(row_text))
+    
+    combined = paragraphs + table_rows
+    return "\n\n".join(combined)
+
+
+def process_docx(
+    file_bytes: bytes,
+    course_id: str,
+    filename: str,
+    chunk_size: int = 200,
+    chunk_overlap: int = 30
+) -> List[Dict[str, Any]]:
+    """Extracts text from DOCX bytes, splits into chunks, and attaches course_id metadata."""
+    full_text = extract_text_from_docx(file_bytes)
+    raw_chunks = chunk_text(full_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+
+    processed_chunks = []
+    for i, chunk in enumerate(raw_chunks):
+        processed_chunks.append({
+            "text": chunk,
+            "course_id": course_id,
+            "chunk_index": i,
+            "filename": filename
+        })
+
+    return processed_chunks
+

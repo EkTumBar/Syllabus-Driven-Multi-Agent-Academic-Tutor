@@ -86,7 +86,7 @@ class DocumentResponse(DocumentBase):
 # ---------------------------------------------------------
 class CourseBase(BaseModel):
     title: str
-    syllabus_raw: str
+    syllabus_raw: Optional[str] = ""
 
 
 class CourseCreate(CourseBase):

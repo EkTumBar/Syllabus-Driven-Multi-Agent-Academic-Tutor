@@ -91,8 +91,33 @@ def test_generate_max_retries_exceeded_raises():
     mock_client.models.generate_content.side_effect = RuntimeError("Persistent API outage")
 
     with patch.object(llm_client, "get_genai_client", return_value=mock_client):
-        with patch("time.sleep", return_value=None):
             with pytest.raises(RuntimeError) as exc_info:
                 llm_client.generate("Test outage", max_retries=2)
             assert "Persistent API outage" in str(exc_info.value)
             assert mock_client.models.generate_content.call_count == 2
+
+
+def test_generate_with_multimodal_files():
+    mock_client = MagicMock()
+    mock_uploaded_file = MagicMock()
+    mock_uploaded_file.name = "files/test_123"
+    mock_client.files.upload.return_value = mock_uploaded_file
+    mock_client.models.generate_content.return_value = MockGenerateResponse("Multimodal modules output")
+
+    with patch.object(llm_client, "get_genai_client", return_value=mock_client):
+        result = llm_client.generate(
+            "Analyze attached syllabus",
+            files=[(b"%PDF-sample", "application/pdf", "syllabus.pdf")]
+        )
+
+        assert result == "Multimodal modules output"
+        # Verify file was uploaded via Gemini File API
+        assert mock_client.files.upload.call_count == 1
+        # Verify contents passed to model includes both prompt and uploaded file object
+        args, kwargs = mock_client.models.generate_content.call_args
+        contents = kwargs["contents"]
+        assert isinstance(contents, list)
+        assert len(contents) == 2
+        assert contents[0] == "Analyze attached syllabus"
+        assert contents[1] == mock_uploaded_file
+

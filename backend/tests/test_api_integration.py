@@ -279,3 +279,70 @@ def test_delete_course_with_full_child_hierarchy(client):
     db2.close()
 
 
+def test_create_course_with_docx_upload_without_manual_text(client):
+    import io
+    import docx
+
+    signup = client.post("/auth/signup", json={"email": "docx_student@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup.status_code == 201
+    headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
+
+    # Generate a real .docx binary in memory
+    doc = docx.Document()
+    doc.add_paragraph("Unit 1: Quantum Mechanics and Wave Functions")
+    doc.add_paragraph("Unit 2: Schrödinger Equation and Potential Wells")
+    b = io.BytesIO()
+    doc.save(b)
+    docx_bytes = b.getvalue()
+
+    mock_plan = '{"modules": [{"title": "Unit 1: Quantum Mechanics", "order_index": 1, "topics": ["Wave Functions"], "prerequisites": []}]}'
+    with patch("agents.planner_agent.generate", return_value=mock_plan):
+        res = client.post(
+            "/courses",
+            headers=headers,
+            data={"title": "Quantum Physics 301"},
+            files={"file": ("quantum_syllabus.docx", docx_bytes, "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}
+        )
+        assert res.status_code == 201
+        data = res.json()
+        assert data["title"] == "Quantum Physics 301"
+        assert "Quantum Mechanics" in data["syllabus_raw"]
+        assert len(data["modules"]) == 1
+
+
+def test_create_course_with_image_upload_without_manual_text(client):
+    signup = client.post("/auth/signup", json={"email": "img_student@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup.status_code == 201
+    headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
+
+    mock_plan = '{"modules": [{"title": "Module 1: Visual Syllabus Overview", "order_index": 1, "topics": ["Diagrams"], "prerequisites": []}]}'
+    fake_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+
+    with patch("agents.planner_agent.generate", return_value=mock_plan):
+        res = client.post(
+            "/courses",
+            headers=headers,
+            data={"title": "Computer Vision 101"},
+            files={"file": ("syllabus_chart.png", fake_png, "image/png")}
+        )
+        assert res.status_code == 201
+        data = res.json()
+        assert data["title"] == "Computer Vision 101"
+        assert len(data["modules"]) == 1
+
+
+def test_create_course_validation_empty_content(client):
+    signup = client.post("/auth/signup", json={"email": "val_student@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup.status_code == 201
+    headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
+
+    # Empty title
+    res1 = client.post("/courses", headers=headers, json={"title": "", "syllabus_raw": "Some syllabus"})
+    assert res1.status_code == 400
+
+    # Empty content and no file
+    res2 = client.post("/courses", headers=headers, json={"title": "Valid Title", "syllabus_raw": ""})
+    assert res2.status_code == 400
+
+
+

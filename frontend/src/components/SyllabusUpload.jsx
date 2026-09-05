@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import apiClient from '../api/client';
-import { Upload, FileText, Sparkles, Loader2, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
+import { Upload, FileText, Sparkles, Loader2, CheckCircle2, AlertCircle, Plus, Image as ImageIcon, X } from 'lucide-react';
 
 export const SyllabusUpload = ({ onCourseCreated }) => {
   const [title, setTitle] = useState('');
   const [syllabusRaw, setSyllabusRaw] = useState('');
-  const [pdfFile, setPdfFile] = useState(null);
+  const [attachedFile, setAttachedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState('');
@@ -25,22 +25,38 @@ Module 3: Sequence Modeling & Attention Mechanisms
   const handleFillSample = () => {
     setTitle('CS229: Machine Learning Foundations');
     setSyllabusRaw(sampleSyllabus);
+    setError('');
   };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
+    if (!file) return;
+
+    const validExtensions = ['.pdf', '.docx', '.png', '.jpg', '.jpeg'];
+    const fileName = file.name.toLowerCase();
+    const isValid = validExtensions.some(ext => fileName.endsWith(ext)) ||
+      file.type === 'application/pdf' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      file.type.startsWith('image/');
+
+    if (isValid) {
+      setAttachedFile(file);
       setError('');
-    } else if (file) {
-      setError('Please select a valid PDF document.');
+    } else {
+      setError('Please select a supported document or image (.pdf, .docx, .png, .jpg, .jpeg).');
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!title.trim() || !syllabusRaw.trim()) {
-      setError('Please provide a course title and syllabus text.');
+
+    if (!title.trim()) {
+      setError('Please provide a course title.');
+      return;
+    }
+
+    if (!syllabusRaw.trim() && !attachedFile) {
+      setError('Please provide syllabus content or upload a document (.pdf, .docx, or image).');
       return;
     }
 
@@ -49,28 +65,25 @@ Module 3: Sequence Modeling & Attention Mechanisms
     setStatusMessage('Planner Agent is structuring your curriculum modules with Gemini...');
 
     try {
-      // 1. Create course and trigger Planner Agent
-      const courseResponse = await apiClient.post('/courses', {
-        title: title.trim(),
-        syllabus_raw: syllabusRaw.trim()
+      const formData = new FormData();
+      formData.append('title', title.trim());
+      if (syllabusRaw.trim()) {
+        formData.append('syllabus_raw', syllabusRaw.trim());
+      }
+      if (attachedFile) {
+        formData.append('file', attachedFile);
+      }
+
+      // Create course and trigger Planner Agent with multimodal file support
+      const courseResponse = await apiClient.post('/courses', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       const createdCourse = courseResponse.data;
-
-      // 2. If PDF was attached, upload and index it via RAG pipeline
-      if (pdfFile) {
-        setStatusMessage('Indexing lecture document with Gemini embeddings and vector store...');
-        const formData = new FormData();
-        formData.append('file', pdfFile);
-
-        await apiClient.post(`/courses/${createdCourse.id}/documents`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-      }
 
       setStatusMessage('Course successfully created!');
       setTitle('');
       setSyllabusRaw('');
-      setPdfFile(null);
+      setAttachedFile(null);
 
       if (onCourseCreated) {
         onCourseCreated(createdCourse);
@@ -92,9 +105,9 @@ Module 3: Sequence Modeling & Attention Mechanisms
             <Upload className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Upload Course Syllabus</h2>
+            <h2 className="text-lg font-bold text-slate-900">Create New Course</h2>
             <p className="text-xs text-slate-500">
-              AI Planner will decompose your curriculum into structured learning modules.
+              Paste your syllabus or upload a document/image (.pdf, .docx, .png, .jpg).
             </p>
           </div>
         </div>
@@ -126,7 +139,7 @@ Module 3: Sequence Modeling & Attention Mechanisms
         {/* Course Title */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-            Course Title
+            Course Title <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
@@ -138,46 +151,67 @@ Module 3: Sequence Modeling & Attention Mechanisms
           />
         </div>
 
-        {/* Syllabus Text */}
+        {/* Syllabus Text (Optional if file attached) */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-            Syllabus Content or Topic Breakdown
-          </label>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+              Syllabus Content or Topic Breakdown
+            </label>
+            <span className="text-[11px] text-slate-400 font-medium">
+              {attachedFile ? 'Optional (file attached)' : 'Required if no file uploaded'}
+            </span>
+          </div>
           <textarea
-            required
             rows={5}
             value={syllabusRaw}
             onChange={(e) => setSyllabusRaw(e.target.value)}
-            placeholder="Paste your course outline, chapters, weekly lecture topics, or prerequisites here..."
+            placeholder="Paste your course outline, chapters, weekly lecture topics, or prerequisites here... (Optional if an outline file is attached below)"
             className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm text-slate-800 transition font-mono"
           />
         </div>
 
-        {/* Optional PDF Upload */}
+        {/* File Upload: PDF, Word DOCX, Images */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-            Optional: Attach Lecture PDF (for RAG Retrieval)
+            Attach Document or Image (.pdf, .docx, .png, .jpg, .jpeg)
           </label>
-          <div className="relative border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-4 transition-colors text-center cursor-pointer bg-slate-50/50 hover:bg-indigo-50/20">
+          <div className="relative border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-5 transition-colors text-center cursor-pointer bg-slate-50/50 hover:bg-indigo-50/20">
             <input
               type="file"
-              accept=".pdf"
+              accept=".pdf,.docx,.png,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
               onChange={handleFileChange}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
             <div className="flex flex-col items-center justify-center gap-1.5 text-slate-600">
-              <FileText className="w-6 h-6 text-slate-400" />
-              {pdfFile ? (
-                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>{pdfFile.name} ({(pdfFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+              <div className="flex items-center gap-2 text-slate-400">
+                <FileText className="w-5 h-5" />
+                <ImageIcon className="w-5 h-5" />
+              </div>
+              {attachedFile ? (
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{attachedFile.name} ({(attachedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setAttachedFile(null);
+                    }}
+                    className="ml-1 text-slate-400 hover:text-rose-600"
+                    title="Remove file"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               ) : (
                 <>
                   <span className="text-xs font-medium text-slate-700">
-                    Click or drag & drop lecture notes / textbook PDF
+                    Click or drag & drop syllabus document or image
                   </span>
-                  <span className="text-[11px] text-slate-400">PDF up to 25 MB</span>
+                  <span className="text-[11px] text-slate-400">
+                    Supported: PDF, Word (.docx), PNG, JPG up to 25 MB
+                  </span>
                 </>
               )}
             </div>
@@ -193,7 +227,7 @@ Module 3: Sequence Modeling & Attention Mechanisms
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Orchestrating Course Pipeline...</span>
+              <span>Analyzing Document & Structuring Curriculum...</span>
             </>
           ) : (
             <>
