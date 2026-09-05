@@ -35,7 +35,7 @@ def test_generate_text_returns_string():
 
         # Verify config passed to SDK
         args, kwargs = mock_client.models.generate_content.call_args
-        assert kwargs["model"] == "gemini-3.1-pro-preview"
+        assert kwargs["model"] == "gemini-3.6-flash"
         config = kwargs["config"]
         assert config.system_instruction == "You are an academic tutor."
         assert config.response_mime_type == "text/plain"

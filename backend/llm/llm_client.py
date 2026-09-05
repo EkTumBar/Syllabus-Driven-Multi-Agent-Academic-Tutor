@@ -29,7 +29,7 @@ def generate(
     prompt: str,
     system: Optional[str] = None,
     json_mode: bool = False,
-    model: str = "gemini-3.1-pro-preview",
+    model: str = "gemini-3.6-flash",
     temperature: float = 0.2,
     max_retries: int = 3
 ) -> str:
