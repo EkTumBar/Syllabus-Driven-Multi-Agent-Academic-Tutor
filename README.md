@@ -12,7 +12,7 @@ graph TD
     B -->|State Persistence & Audit Trail| C[(Supabase Postgres + pgvector)]
     B -->|Document Storage| D[(Supabase Storage Bucket)]
     
-    subgraph Multi-Agent Orchestrator [LangGraph State Machine]
+    subgraph Multi-AgentOrchestrator [LangGraph State Machine]
         E[Planner Agent] -->|Extract Modules| F[Researcher Agent]
         F -->|Context Excerpts| G[Examiner Agent]
         G -->|Adaptive Quiz| H[Evaluator Agent]
@@ -20,8 +20,8 @@ graph TD
         I -->|Targeted Context| G
     end
 
-    B --> Multi-Agent Orchestrator
-    Multi-Agent Orchestrator -->|Gemini 2.5 Flash & text-embedding-004| J[Google Gemini API]
+    B --> Multi-AgentOrchestrator
+    Multi-AgentOrchestrator -->|Gemini 2.5 Flash & text-embedding-004| J[Google Gemini API]
 ```
 
 ### The Four Collaborative AI Agents:
