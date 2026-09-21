@@ -1,6 +1,6 @@
 # Syllabus-Driven Multi-Agent Academic Tutor 🎓🤖
 
-An intelligent, multi-tenant academic tutoring web application powered by **Google Gemini 2.5**, **LangGraph**, **FastAPI**, **Postgres (with pgvector & Supabase Storage)**, and **React**.
+An intelligent, multi-tenant academic tutoring web application powered by **Google Gemini 3.6**, **LangGraph**, **FastAPI**, **Postgres (with pgvector & Supabase Storage)**, and **React**.
 
 ---
 
