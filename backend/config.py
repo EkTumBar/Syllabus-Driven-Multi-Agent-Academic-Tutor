@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # Gemini
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "default_dev_secret_key_change_me")

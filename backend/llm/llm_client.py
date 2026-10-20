@@ -30,7 +30,7 @@ def generate(
     prompt: str,
     system: Optional[str] = None,
     json_mode: bool = False,
-    model: str = "gemini-3.6-flash",
+    model: Optional[str] = None,
     temperature: float = 0.2,
     max_retries: int = 3,
     files: Optional[List[Any]] = None
@@ -43,7 +43,7 @@ def generate(
         prompt: User prompt content.
         system: Optional system instruction.
         json_mode: If True, enforces structured JSON output mime type.
-        model: Target Gemini model identifier (default: 'gemini-3.6-flash').
+        model: Target Gemini model identifier (default: settings.GEMINI_MODEL or 'gemini-2.5-flash').
         temperature: Sampling temperature (default: 0.2 for deterministic academic evaluation).
         max_retries: Number of retry attempts on transient failures.
         files: Optional list of files (file objects, paths, (bytes, mime_type) tuples, or dicts).
@@ -51,6 +51,7 @@ def generate(
     Returns:
         Generated text response string.
     """
+    target_model = model or getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash")
     client = get_genai_client()
 
     config = types.GenerateContentConfig(
@@ -102,10 +103,11 @@ def generate(
 
     last_exception = None
 
+    current_model = target_model
     for attempt in range(1, max_retries + 1):
         try:
             response = client.models.generate_content(
-                model=model,
+                model=current_model,
                 contents=contents,
                 config=config
             )
@@ -118,20 +120,26 @@ def generate(
                 total_tokens = getattr(usage, "total_token_count", "N/A")
                 logger.info(
                     "Gemini API Token Usage [model=%s]: prompt=%s, candidates=%s, total=%s",
-                    model, prompt_tokens, candidate_tokens, total_tokens
+                    current_model, prompt_tokens, candidate_tokens, total_tokens
                 )
 
             return response.text or ""
 
         except Exception as e:
             last_exception = e
+            err_str = str(e).lower()
             logger.warning(
-                "Gemini API call attempt %d/%d failed with error: %s",
-                attempt, max_retries, str(e)
+                "Gemini API call attempt %d/%d with model '%s' failed: %s",
+                attempt, max_retries, current_model, str(e)
             )
+            # Automatic model fallback if model identifier is 404 not found
+            if ("not found" in err_str or "404" in err_str) and current_model != "gemini-1.5-flash":
+                logger.info("Model '%s' not recognized by Gemini API; switching to 'gemini-1.5-flash'", current_model)
+                current_model = "gemini-1.5-flash"
+
             if attempt < max_retries:
                 backoff_seconds = min(1.5 * attempt, 3.0)
                 time.sleep(backoff_seconds)
 
-    logger.error("All %d Gemini API call attempts failed.", max_retries)
+    logger.error("All %d Gemini API call attempts failed (last model: %s).", max_retries, current_model)
     raise last_exception
