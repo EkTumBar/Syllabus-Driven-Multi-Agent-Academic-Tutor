@@ -193,8 +193,11 @@ async def create_course_endpoint(
             files=multimodal_files if multimodal_files else None
         )
     except Exception as e:
-        logger.warning("Planner agent failed during course creation: %s", str(e))
-        crud.create_module(db=db, course_id=course.id, title="Module 1: General Course Content", order_index=1)
+        logger.error("Planner agent failed during course creation for '%s': %s", title, str(e), exc_info=True)
+        lines = [l.strip() for l in syllabus_raw.splitlines() if l.strip() and not l.startswith("[Extracted")]
+        mod_title = lines[0] if lines else title
+        clean_title = mod_title if (mod_title.lower().startswith("module") or mod_title.lower().startswith("unit")) else f"Module 1: {mod_title}"
+        crud.create_module(db=db, course_id=course.id, title=clean_title, order_index=1)
 
     db.refresh(course)
     return course

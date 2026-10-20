@@ -1,6 +1,7 @@
 import json
 import logging
 import uuid
+import re
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from llm.llm_client import generate
@@ -86,15 +87,16 @@ def _parse_questions_from_response(
     if not response_text or not response_text.strip():
         raise ValueError("LLM returned an empty response — cannot generate questions")
 
-    # Clean potential markdown fences
+    # Clean potential markdown fences or conversational wrappers
     cleaned_text = response_text.strip()
-    if cleaned_text.startswith("```json"):
-        cleaned_text = cleaned_text[7:]
-    elif cleaned_text.startswith("```"):
-        cleaned_text = cleaned_text[3:]
-    if cleaned_text.endswith("```"):
-        cleaned_text = cleaned_text[:-3]
-    cleaned_text = cleaned_text.strip()
+    match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned_text)
+    if match:
+        cleaned_text = match.group(1).strip()
+    else:
+        # Also look for outermost [ ... ] or { ... }
+        match_bracket = re.search(r'(\[[\s\S]*\]|\{[\s\S]*\})', cleaned_text)
+        if match_bracket:
+            cleaned_text = match_bracket.group(1).strip()
 
     try:
         data = json.loads(cleaned_text)
@@ -237,26 +239,14 @@ Return STRICTLY a JSON array containing the {target_count} questions with:
         except Exception as parse_err:
             logger.error("Parsing question bank failed for topic='%s': %s", topic, str(parse_err))
 
-    # Academic fallback if LLM unreachable or empty
     if not questions:
-        logger.warning("Generating procedural question bank fallback for topic='%s' (LLM error: %s)", topic, llm_error)
-        questions = []
-        difficulties = ["easy", "medium", "hard"]
-        for i in range(min(target_count, 10)):
-            diff = difficulties[i % 3]
-            q_num = i + 1
-            questions.append({
-                "question_text": f"What is a primary principle of {topic} (Concept {q_num})?",
-                "options_json": [
-                    f"A. Fundamental theoretical axiom of {topic}",
-                    f"B. Secondary auxiliary mechanism",
-                    f"C. Inverse contradictory condition",
-                    f"D. Unrelated arbitrary property"
-                ],
-                "correct_answer": f"A. Fundamental theoretical axiom of {topic}",
-                "difficulty": diff,
-                "explanation": f"In {topic}, Option A represents the foundational tenet governing the behavior under study."
-            })
+        logger.error(
+            "Examiner question bank generation failed completely for topic='%s'. LLM error: %s. Response text: %s",
+            topic, llm_error, response_text[:500] if response_text else "<EMPTY>"
+        )
+        raise RuntimeError(
+            f"Failed to generate questions for topic '{topic}'. LLM error: {llm_error}. Response: {response_text[:200] if response_text else '<EMPTY>'}"
+        )
 
     # Save questions to Supabase / Postgres DB
     if db is not None and module_id is not None:
@@ -337,20 +327,8 @@ Return JSON with 'questions' array.
             logger.error("Examiner generate_quiz parse failed: %s", str(e))
 
     if not questions:
-        questions = [
-            {
-                "question_text": f"What is a fundamental concept of {topic}?",
-                "options_json": [
-                    f"A. A core principle of {topic}",
-                    "B. An unrelated concept",
-                    "C. None of the above",
-                    "D. All of the above"
-                ],
-                "correct_answer": f"A. A core principle of {topic}",
-                "difficulty": target_difficulty,
-                "explanation": f"Core principle of {topic} represents the primary definition."
-            }
-        ]
+        logger.error("generate_quiz failed for topic='%s'. Response: %s", topic, response_text[:500] if response_text else "<EMPTY>")
+        raise RuntimeError(f"Failed to generate quiz for topic '{topic}'. LLM output was invalid or empty.")
 
     if db is not None and module_id is not None:
         saved_questions = []

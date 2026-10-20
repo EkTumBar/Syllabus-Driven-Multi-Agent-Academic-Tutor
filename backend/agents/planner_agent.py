@@ -50,21 +50,52 @@ def plan_syllabus(
         files=files
     )
 
+    import re
+    modules = []
     try:
-        data = json.loads(response_text)
-        modules = data.get("modules", [])
-        if not isinstance(modules, list):
+        cleaned = response_text.strip()
+        if "```" in cleaned:
+            match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned)
+            if match:
+                cleaned = match.group(1).strip()
+        data = json.loads(cleaned)
+        if isinstance(data, list):
+            modules = data
+        elif isinstance(data, dict):
+            modules = data.get("modules") or data.get("curriculum") or data.get("topics") or []
+        else:
             modules = []
     except Exception as e:
         logger.error("Failed to parse JSON output from Planner Agent: %s. Response: %s", str(e), response_text)
+        modules = []
+
+    # If parsing didn't yield modules, extract directly from user's actual syllabus text
+    if not modules and syllabus_raw and syllabus_raw.strip():
+        logger.info("Extracting modules directly from syllabus lines as fallback")
+        lines = [line.strip() for line in syllabus_raw.splitlines() if line.strip() and not line.startswith("[Extracted")]
+        found = []
+        for line in lines:
+            if any(line.lower().startswith(p) for p in ["module", "chapter", "unit", "week", "topic", "part", "#"]):
+                clean = line.lstrip("#").strip()
+                if len(clean) > 3:
+                    found.append(clean)
+        if not found:
+            substantive = [l for l in lines if len(l) > 5]
+            found = substantive[:5] if substantive else [lines[0]]
+
         modules = [
             {
-                "title": "Module 1: General Course Content",
-                "order_index": 1,
-                "topics": ["Introduction"],
+                "title": title if (title.lower().startswith("module") or title.lower().startswith("unit")) else f"Module {i+1}: {title}",
+                "order_index": i + 1,
+                "topics": [title],
                 "prerequisites": []
             }
+            for i, title in enumerate(found)
         ]
+
+    if not modules:
+        logger.error("Planner agent failed: unable to extract curriculum modules from syllabus.")
+        raise ValueError(f"Unable to extract curriculum modules from provided syllabus. Response: {response_text[:300]}")
 
     # If database and course_id provided, persist to database
     if db is not None and course_id is not None:

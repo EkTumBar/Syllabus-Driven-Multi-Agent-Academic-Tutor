@@ -107,3 +107,90 @@ def test_extract_text_and_process_image():
         assert len(chunks) >= 1
         assert chunks[0]["course_id"] == "c_img"
         assert "Photosynthesis" in chunks[0]["text"]
+
+
+def test_quiz_progression_increments_index_and_total_count(db):
+    """
+    Verifies that when a question bank is initialized,
+    the index advances from Question 1 of 20 -> Question 2 of 20 -> Question 3 of 20
+    via fast database lookup with zero live LLM calls.
+    """
+    from agents.orchestrator import run_step
+
+    user = User(id="user_prog_test", email="prog@univ.edu", hashed_password="pw", role="student")
+    course = Course(id="course_prog_test", user_id=user.id, title="Discrete Mathematics", syllabus_raw="Set theory & Graph theory")
+    mod = Module(id="mod_prog_test", course_id=course.id, title="Set Theory", order_index=1)
+    db.add_all([user, course, mod])
+    db.commit()
+
+    # Pre-generate 20 questions
+    mock_bank = json.dumps({
+        "questions": [
+            {
+                "question": f"Question {i+1}: What is theorem #{i+1}?",
+                "options": ["A. Choice A", "B. Choice B", "C. Choice C", "D. Choice D"],
+                "correct_answer": "A. Choice A",
+                "difficulty": "medium",
+                "explanation": f"Explanation for theorem #{i+1}"
+            }
+            for i in range(20)
+        ]
+    })
+
+    with patch("agents.examiner_agent.generate", return_value=mock_bank):
+        step1 = run_step(db=db, course_id=course.id, user_id=user.id, step_input={"action": "next_question"})
+        p1 = step1["payload"]
+        assert p1["type"] == "question"
+        assert p1["question_index"] == 1
+        assert p1["total_questions"] == 20
+        assert len(p1["questions"]) == 1
+        q1_id = p1["questions"][0]["id"]
+        assert "Question 1:" in p1["questions"][0]["question_text"]
+
+    # Student answers Question 1
+    eval_step = run_step(
+        db=db,
+        course_id=course.id,
+        user_id=user.id,
+        step_input={
+            "action": "submit_answer",
+            "question_id": q1_id,
+            "answer_given": "A. Choice A",
+            "correct_answer": "A. Choice A"
+        }
+    )
+    assert eval_step["payload"]["evaluation"]["is_correct"] is True
+
+    # User clicks Next Question - zero live LLM calls allowed!
+    step2 = run_step(db=db, course_id=course.id, user_id=user.id, step_input={"action": "next_question"})
+    p2 = step2["payload"]
+    assert p2["type"] == "question"
+    assert p2["question_index"] == 2
+    assert p2["total_questions"] == 20
+    assert len(p2["questions"]) == 1
+    q2_id = p2["questions"][0]["id"]
+    assert q2_id != q1_id
+    assert "Question 2:" in p2["questions"][0]["question_text"]
+
+    # Student answers Question 2
+    eval_step2 = run_step(
+        db=db,
+        course_id=course.id,
+        user_id=user.id,
+        step_input={
+            "action": "submit_answer",
+            "question_id": q2_id,
+            "answer_given": "B. Choice B",
+            "correct_answer": "A. Choice A"
+        }
+    )
+    assert eval_step2["payload"]["evaluation"]["is_correct"] is False
+
+    # User clicks Next Question - advances to Question 3 of 20
+    step3 = run_step(db=db, course_id=course.id, user_id=user.id, step_input={"action": "next_question"})
+    p3 = step3["payload"]
+    assert p3["type"] == "question"
+    assert p3["question_index"] == 3
+    assert p3["total_questions"] == 20
+    assert "Question 3:" in p3["questions"][0]["question_text"]
+

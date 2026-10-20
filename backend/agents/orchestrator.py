@@ -100,10 +100,13 @@ def planner_node(state: TutorState) -> Dict[str, Any]:
                 plan_syllabus(syllabus_raw=syllabus_text, course_id=course_id, db=db)
             except Exception as e:
                 logger.error("Planner agent failed during run_step: %s", str(e), exc_info=True)
+                lines = [l.strip() for l in syllabus_text.splitlines() if l.strip() and not l.startswith("[Extracted")]
+                mod_title = lines[0] if lines else (course.title if course else "Course Curriculum")
+                clean_title = mod_title if (mod_title.lower().startswith("module") or mod_title.lower().startswith("unit")) else f"Module 1: {mod_title}"
                 crud.create_module(
                     db=db,
                     course_id=course_id,
-                    title="Module 1: General Course Content",
+                    title=clean_title,
                     order_index=1
                 )
             modules = crud.get_modules_by_course(db, course_id=course_id)
@@ -279,34 +282,70 @@ def examiner_node(state: TutorState) -> Dict[str, Any]:
                 "status": "idle"
             }
 
-    # 2. If no questions exist in DB for this module, generate and persist to DB
+    # 2. If no questions exist in DB for this module, generate a batch of 20 MCQs and save to DB
     if db:
         try:
             db.commit()
         except Exception:
             pass
 
-    questions = generate_quiz(
-        topic=topic,
-        context_text=context_text,
-        module_id=module_id,
-        mastery_score=mastery_score,
-        num_questions=1,
-        db=db
-    )
+    logger.info("Generating batch question bank for module '%s' (%s)", module_id, topic)
+    from agents.examiner_agent import generate_question_bank
+    try:
+        bank = generate_question_bank(
+            course_id=course_id,
+            module_id=module_id,
+            topic=topic,
+            context_text=context_text,
+            count=20,
+            db=db
+        )
+    except Exception as qb_err:
+        logger.warning("generate_question_bank encountered error: %s. Trying fallback to generate_quiz...", str(qb_err))
+        bank = generate_quiz(
+            topic=topic,
+            context_text=context_text,
+            module_id=module_id,
+            mastery_score=mastery_score,
+            num_questions=20,
+            db=db
+        )
+
+    # Re-fetch from DB to get the saved questions
+    saved_db_qs = crud.get_questions_by_module(db, module_id=module_id) if (db and module_id) else []
+    all_qs = saved_db_qs if saved_db_qs else bank
+
+    if not all_qs:
+        logger.error("Failed to generate any questions for topic='%s', module_id='%s'", topic, module_id)
+        raise ValueError(f"Failed to generate questions for topic '{topic}'")
+
+    first_q = all_qs[0]
+    total_q = len(all_qs)
+
+    q_dict = {
+        "id": getattr(first_q, "id", None) or first_q.get("id"),
+        "module_id": getattr(first_q, "module_id", None) or first_q.get("module_id"),
+        "question_text": getattr(first_q, "question_text", None) or first_q.get("question_text"),
+        "options_json": getattr(first_q, "options_json", None) or first_q.get("options_json"),
+        "correct_answer": getattr(first_q, "correct_answer", None) or first_q.get("correct_answer"),
+        "difficulty": getattr(first_q, "difficulty", "medium") or first_q.get("difficulty", "medium"),
+        "explanation": getattr(first_q, "explanation", "") or first_q.get("explanation", ""),
+        "order_index": getattr(first_q, "order_index", 1) or first_q.get("order_index", 1)
+    }
+    questions = [q_dict]
 
     step_output = {
         "type": "question",
         "topic": topic,
         "mastery_score": mastery_score,
         "question_index": 1,
-        "total_questions": max(1, len(questions)),
+        "total_questions": total_q,
         "questions": questions
     }
 
     logger.info(
-        "Examiner produced %d question(s) for topic='%s', mastery=%.2f",
-        len(questions), topic, mastery_score
+        "Examiner initialized question bank with %d question(s) for topic='%s' (serving 1/%d)",
+        total_q, topic, total_q
     )
 
     return {
