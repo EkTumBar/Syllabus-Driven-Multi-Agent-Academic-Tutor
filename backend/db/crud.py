@@ -179,14 +179,18 @@ def create_question(
     question_text: str,
     options_json: List[str],
     correct_answer: str,
-    difficulty: str = "medium"
+    difficulty: str = "medium",
+    explanation: Optional[str] = None,
+    order_index: int = 0
 ) -> Question:
     question = Question(
         module_id=module_id,
         question_text=question_text,
         options_json=options_json,
         correct_answer=correct_answer,
-        difficulty=difficulty
+        difficulty=difficulty,
+        explanation=explanation,
+        order_index=order_index
     )
     db.add(question)
     db.commit()
@@ -198,7 +202,24 @@ def get_questions_by_module(db: Session, module_id: str, difficulty: Optional[st
     query = db.query(Question).filter(Question.module_id == module_id)
     if difficulty:
         query = query.filter(Question.difficulty == difficulty)
-    return query.all()
+    return query.order_by(Question.order_index, Question.id).all()
+
+
+def get_questions_by_course(db: Session, course_id: str) -> List[Question]:
+    modules = get_modules_by_course(db, course_id)
+    module_ids = [m.id for m in modules]
+    if not module_ids:
+        return []
+    return db.query(Question).filter(Question.module_id.in_(module_ids)).order_by(Question.order_index, Question.id).all()
+
+
+def delete_questions_by_module(db: Session, module_id: str) -> int:
+    q_ids = [q[0] for q in db.query(Question.id).filter(Question.module_id == module_id).all()]
+    if q_ids:
+        db.query(Attempt).filter(Attempt.question_id.in_(q_ids)).delete(synchronize_session=False)
+    count = db.query(Question).filter(Question.module_id == module_id).delete(synchronize_session=False)
+    db.commit()
+    return count
 
 
 def get_question_by_id(db: Session, question_id: str) -> Optional[Question]:

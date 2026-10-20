@@ -121,3 +121,43 @@ async def submit_answer(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to evaluate your answer. Please try again."
         )
+
+
+@router.post("/courses/{course_id}/reset-quiz")
+def reset_quiz_progress(
+    course_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Resets the student's quiz attempts for this course, allowing a fresh exam run through the question bank."""
+    course = crud.get_course_by_id(db, course_id=course_id)
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    if course.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    # Delete all attempts by this user for questions belonging to this course
+    modules = crud.get_modules_by_course(db, course_id=course_id)
+    mod_ids = [m.id for m in modules]
+    if mod_ids:
+        q_rows = db.query(crud.Question.id).filter(crud.Question.module_id.in_(mod_ids)).all()
+        q_ids = [q[0] for q in q_rows]
+        if q_ids:
+            db.query(crud.Attempt).filter(
+                crud.Attempt.user_id == current_user.id,
+                crud.Attempt.question_id.in_(q_ids)
+            ).delete(synchronize_session=False)
+            db.commit()
+
+    # Reset orchestrator pointer to first module
+    if modules:
+        crud.upsert_orchestrator_state(
+            db=db,
+            user_id=current_user.id,
+            course_id=course_id,
+            current_module=modules[0].id,
+            status="idle"
+        )
+
+    return {"message": "Quiz progress reset successfully. You can now retake the exam bank from question 1."}
+

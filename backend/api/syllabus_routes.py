@@ -12,9 +12,12 @@ from rag.ingest import (
     extract_text_from_pdf,
     extract_text_from_docx,
     extract_text_from_doc,
+    extract_text_from_image,
     process_pdf,
     process_docx,
     process_doc,
+    process_image,
+    process_text,
 )
 from rag.embeddings import embed_batch
 from rag.vector_store import add_chunks
@@ -98,19 +101,28 @@ async def create_course_endpoint(
                     pdf_text = extract_text_from_pdf(file_bytes)
                     if not syllabus_raw and pdf_text.strip():
                         syllabus_raw = pdf_text
-                    elif not syllabus_raw:
-                        syllabus_raw = f"[Course syllabus uploaded from PDF: {filename}]"
+                    elif pdf_text.strip():
+                        syllabus_raw = f"{syllabus_raw}\n\n[Extracted from {filename}]:\n{pdf_text}"
                 except Exception as pdf_err:
                     logger.warning("Failed to extract text from PDF: %s", str(pdf_err))
-                    if not syllabus_raw:
-                        syllabus_raw = f"[Course syllabus uploaded from PDF: {filename}]"
+                if not syllabus_raw:
+                    syllabus_raw = f"[Course syllabus uploaded from PDF: {filename}]"
 
                 multimodal_files.append((file_bytes, "application/pdf", filename))
 
             elif any(lower_name.endswith(ext) for ext in [".png", ".jpg", ".jpeg"]) or mime_type.startswith("image/"):
+                img_mime = mime_type if mime_type.startswith("image/") else ("image/png" if lower_name.endswith(".png") else "image/jpeg")
+                try:
+                    img_text = extract_text_from_image(file_bytes, mime_type=img_mime, filename=filename)
+                    if not syllabus_raw and img_text.strip():
+                        syllabus_raw = img_text
+                    elif img_text.strip():
+                        syllabus_raw = f"{syllabus_raw}\n\n[Extracted from image {filename}]:\n{img_text}"
+                except Exception as img_err:
+                    logger.warning("Failed to extract text from image: %s", str(img_err))
+
                 if not syllabus_raw:
                     syllabus_raw = f"[Course syllabus uploaded from image: {filename}]"
-                img_mime = mime_type if mime_type.startswith("image/") else ("image/png" if lower_name.endswith(".png") else "image/jpeg")
                 multimodal_files.append((file_bytes, img_mime, filename))
             else:
                 if not syllabus_raw:
@@ -159,7 +171,10 @@ async def create_course_endpoint(
                 chunks = process_docx(file_bytes=file_bytes, course_id=course.id, filename=filename)
             elif lower_name.endswith(".doc"):
                 chunks = process_doc(file_bytes=file_bytes, course_id=course.id, filename=filename)
-            
+            elif any(lower_name.endswith(ext) for ext in [".png", ".jpg", ".jpeg"]) or mime_type.startswith("image/"):
+                img_mime = mime_type if mime_type.startswith("image/") else ("image/png" if lower_name.endswith(".png") else "image/jpeg")
+                chunks = process_image(file_bytes=file_bytes, course_id=course.id, filename=filename, mime_type=img_mime)
+
             if chunks:
                 texts = [c["text"] for c in chunks]
                 embeddings = embed_batch(texts)
@@ -254,6 +269,9 @@ async def upload_course_document(
             chunks = process_docx(file_bytes=file_bytes, course_id=course.id, filename=filename)
         elif lower_name.endswith(".doc"):
             chunks = process_doc(file_bytes=file_bytes, course_id=course.id, filename=filename)
+        elif any(lower_name.endswith(ext) for ext in [".png", ".jpg", ".jpeg"]) or (file.content_type and file.content_type.startswith("image/")):
+            img_mime = file.content_type or ("image/png" if lower_name.endswith(".png") else "image/jpeg")
+            chunks = process_image(file_bytes=file_bytes, course_id=course.id, filename=filename, mime_type=img_mime)
         else:
             chunks = process_pdf(file_bytes=file_bytes, course_id=course.id, filename=filename)
 
@@ -292,6 +310,71 @@ def list_course_documents(
 
     docs = crud.get_documents_by_course(db, course_id=course_id)
     return docs
+
+
+@router.post("/{course_id}/modules/{module_id}/generate-questions")
+def generate_module_question_bank(
+    course_id: str,
+    module_id: str,
+    count: int = 25,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Triggers the Multi-Agent Pre-Generation Question Bank pipeline (NTA/JEE/NEET style).
+    Builds a full array of unique MCQs (20-50 questions) grounded in the syllabus and course context,
+    and saves them directly into Supabase.
+    """
+    course = crud.get_course_by_id(db, course_id=course_id)
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    if course.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    module = crud.get_module_by_id(db, module_id=module_id)
+    if not module or module.course_id != course_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module not found in this course")
+
+    target_count = max(5, min(50, count))
+
+    # Gather existing question stems to avoid duplicates
+    existing_qs = crud.get_questions_by_module(db, module_id=module_id)
+    existing_stems = [q.question_text for q in existing_qs]
+
+    # Retrieve context from RAG vector store or raw syllabus
+    from agents.researcher_agent import research_topic
+    from agents.examiner_agent import generate_question_bank
+
+    context_res = research_topic(db=db, course_id=course_id, topic=module.title, top_k=6)
+    context_text = context_res.get("context_text", "")
+    if not context_text.strip():
+        context_text = course.syllabus_raw[:4000]
+
+    try:
+        new_questions = generate_question_bank(
+            course_id=course_id,
+            module_id=module_id,
+            topic=module.title,
+            context_text=context_text,
+            count=target_count,
+            existing_questions=existing_stems,
+            db=db
+        )
+    except Exception as e:
+        logger.error("Failed to generate question bank for module %s: %s", module_id, str(e), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Question bank generation failed: {str(e)}"
+        )
+
+    return {
+        "message": f"Successfully generated {len(new_questions)} questions for {module.title}",
+        "module_id": module_id,
+        "topic": module.title,
+        "count": len(new_questions),
+        "total_module_questions": len(crud.get_questions_by_module(db, module_id=module_id)),
+        "questions": new_questions
+    }
 
 
 @router.delete("/{course_id}")

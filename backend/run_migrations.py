@@ -35,10 +35,24 @@ def run_db_migrations():
     try:
         from db.database import engine, Base
         import db.models  # noqa: F401
+        from sqlalchemy import inspect, text
         Base.metadata.create_all(bind=engine)
-        logger.info("Database schema tables verified successfully.")
+        
+        # Verify questions columns exist (handles existing databases without alembic sync)
+        with engine.connect() as conn:
+            inspector = inspect(conn)
+            if "questions" in inspector.get_table_names():
+                cols = [c["name"] for c in inspector.get_columns("questions")]
+                if "explanation" not in cols:
+                    conn.execute(text("ALTER TABLE questions ADD COLUMN explanation TEXT;"))
+                    conn.commit()
+                if "order_index" not in cols:
+                    conn.execute(text("ALTER TABLE questions ADD COLUMN order_index INTEGER DEFAULT 0 NOT NULL;"))
+                    conn.commit()
+
+        logger.info("Database schema tables and columns verified successfully.")
     except Exception as e:
-        logger.warning("Base.metadata.create_all notice: %s", str(e))
+        logger.warning("Database schema check notice: %s", str(e))
 
 
 if __name__ == "__main__":

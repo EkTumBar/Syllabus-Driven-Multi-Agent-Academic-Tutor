@@ -158,20 +158,25 @@ export const Course = () => {
               {modules.map((mod, idx) => (
                 <div
                   key={mod.id || idx}
-                  className="p-3 rounded-xl border border-slate-100 bg-slate-50/50 flex items-center justify-between text-xs"
+                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px] shrink-0">
                       {idx + 1}
                     </span>
                     <span className="font-semibold text-slate-800">{mod.title}</span>
                   </div>
 
-                  {mod.prerequisites_json && mod.prerequisites_json.length > 0 && (
-                    <span className="text-[10px] text-slate-600 font-medium">
-                      Prereq: {mod.prerequisites_json.join(', ')}
+                  <div className="flex items-center gap-2">
+                    {mod.prerequisites_json && mod.prerequisites_json.length > 0 && (
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Prereq: {mod.prerequisites_json.join(', ')}
+                      </span>
+                    )}
+                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                      CBT Question Bank
                     </span>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>

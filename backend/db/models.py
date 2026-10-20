@@ -121,10 +121,13 @@ class Question(Base):
     options_json = Column(JSON, nullable=False)
     correct_answer = Column(Text, nullable=False)
     difficulty = Column(String(50), default="medium", nullable=False)
+    explanation = Column(Text, nullable=True)
+    order_index = Column(Integer, default=0, nullable=False)
 
     # Composite Indexes
     __table_args__ = (
         Index("ix_questions_module_difficulty", "module_id", "difficulty"),
+        Index("ix_questions_module_order", "module_id", "order_index"),
     )
 
     # Relationships

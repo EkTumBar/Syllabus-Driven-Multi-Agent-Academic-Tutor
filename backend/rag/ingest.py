@@ -191,3 +191,75 @@ def process_doc(
     return processed_chunks
 
 
+def extract_text_from_image(
+    file_bytes: bytes,
+    mime_type: str = "image/png",
+    filename: str = "image.png"
+) -> str:
+    """Extracts text, topics, questions, or syllabus content from an image using Gemini vision."""
+    from llm.llm_client import generate
+    try:
+        prompt = (
+            "You are an expert academic curriculum transcription assistant. "
+            "Please transcribe all text, syllabus outlines, curriculum topics, lecture notes, "
+            "or questions visible in this image accurately, completely, and verbatim. "
+            "Return only the extracted text without introductory or concluding commentary."
+        )
+        extracted = generate(
+            prompt=prompt,
+            files=[(file_bytes, mime_type, filename)],
+            temperature=0.1
+        )
+        return (extracted or "").strip()
+    except Exception as e:
+        import logging
+        logging.getLogger("ingest").warning("Failed to extract text from image '%s': %s", filename, str(e))
+        return ""
+
+
+def process_image(
+    file_bytes: bytes,
+    course_id: str,
+    filename: str,
+    mime_type: str = "image/png",
+    chunk_size: int = 200,
+    chunk_overlap: int = 30
+) -> List[Dict[str, Any]]:
+    """Extracts text from image bytes via Gemini vision, chunks, and attaches course_id metadata."""
+    full_text = extract_text_from_image(file_bytes, mime_type=mime_type, filename=filename)
+    if not full_text:
+        return []
+    raw_chunks = chunk_text(full_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    return [
+        {
+            "text": chunk,
+            "course_id": course_id,
+            "chunk_index": i,
+            "filename": filename
+        }
+        for i, chunk in enumerate(raw_chunks)
+    ]
+
+
+def process_text(
+    text: str,
+    course_id: str,
+    filename: str = "syllabus.txt",
+    chunk_size: int = 200,
+    chunk_overlap: int = 30
+) -> List[Dict[str, Any]]:
+    """Chunks raw text and attaches course_id metadata for vector indexing."""
+    if not text or not text.strip():
+        return []
+    raw_chunks = chunk_text(text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    return [
+        {
+            "text": chunk,
+            "course_id": course_id,
+            "chunk_index": i,
+            "filename": filename
+        }
+        for i, chunk in enumerate(raw_chunks)
+    ]
+
+

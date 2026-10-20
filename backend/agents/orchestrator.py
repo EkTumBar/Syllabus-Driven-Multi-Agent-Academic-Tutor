@@ -157,9 +157,10 @@ def researcher_node(state: TutorState) -> Dict[str, Any]:
 
 
 def examiner_node(state: TutorState) -> Dict[str, Any]:
-    """Generates difficulty-calibrated assessment questions based on student mastery."""
+    """Retrieves or pre-generates difficulty-calibrated assessment questions based on student mastery."""
     db: Session = state.get("db")
     user_id = state["user_id"]
+    course_id = state["course_id"]
     module_id = state.get("current_module_id")
     topic = state.get("current_topic") or "Module Review"
     context_text = state.get("context_text", "")
@@ -169,7 +170,50 @@ def examiner_node(state: TutorState) -> Dict[str, Any]:
         mastery_record = crud.get_mastery_record(db, user_id=user_id, module_id=module_id, topic=topic)
     mastery_score = mastery_record.score_0to1 if mastery_record else 0.5
 
-    # Commit read transaction to release connection from pool while LLM generates quiz
+    # 1. First, check if questions already exist in Supabase for this module
+    if module_id:
+        existing_db_questions = crud.get_questions_by_module(db, module_id=module_id)
+        if existing_db_questions:
+            # Check user attempts to pick next unanswered question
+            attempts = crud.get_attempts_by_user(db, user_id=user_id)
+            answered_q_ids = set(a.question_id for a in attempts)
+            unanswered = [q for q in existing_db_questions if q.id not in answered_q_ids]
+
+            chosen_q = unanswered[0] if unanswered else existing_db_questions[0]
+            question_idx = (len(existing_db_questions) - len(unanswered) + 1) if unanswered else len(existing_db_questions)
+            total_q = len(existing_db_questions)
+
+            q_dict = {
+                "id": chosen_q.id,
+                "module_id": chosen_q.module_id,
+                "question_text": chosen_q.question_text,
+                "options_json": chosen_q.options_json,
+                "correct_answer": chosen_q.correct_answer,
+                "difficulty": chosen_q.difficulty,
+                "explanation": getattr(chosen_q, "explanation", "") or "",
+                "order_index": getattr(chosen_q, "order_index", 1) or 1
+            }
+            questions = [q_dict]
+
+            step_output = {
+                "type": "question",
+                "topic": topic,
+                "mastery_score": mastery_score,
+                "question_index": question_idx,
+                "total_questions": total_q,
+                "questions": questions
+            }
+            logger.info(
+                "Examiner served pre-generated question %d/%d for topic='%s' (zero-delay)",
+                question_idx, total_q, topic
+            )
+            return {
+                "generated_questions": questions,
+                "step_output": step_output,
+                "status": "idle"
+            }
+
+    # 2. If no questions exist in DB for this module, generate and persist to DB
     if db:
         try:
             db.commit()
@@ -189,6 +233,8 @@ def examiner_node(state: TutorState) -> Dict[str, Any]:
         "type": "question",
         "topic": topic,
         "mastery_score": mastery_score,
+        "question_index": 1,
+        "total_questions": max(1, len(questions)),
         "questions": questions
     }
 
@@ -205,7 +251,7 @@ def examiner_node(state: TutorState) -> Dict[str, Any]:
 
 
 def evaluator_node(state: TutorState) -> Dict[str, Any]:
-    """Evaluates student's submitted answer and computes remediation trigger."""
+    """Evaluates student's submitted answer with fast local validation."""
     db: Session = state.get("db")
     user_id = state["user_id"]
     module_id = state.get("current_module_id")
@@ -217,6 +263,17 @@ def evaluator_node(state: TutorState) -> Dict[str, Any]:
     correct_answer = step_input.get("correct_answer", "")
     question_text = step_input.get("question_text", "")
 
+    # Look up question to get explanation for instant zero-delay feedback
+    question_explanation = None
+    if db and question_id:
+        db_q = crud.get_question_by_id(db, question_id=question_id)
+        if db_q:
+            if not correct_answer:
+                correct_answer = db_q.correct_answer
+            if not question_text:
+                question_text = db_q.question_text
+            question_explanation = getattr(db_q, "explanation", None)
+
     eval_result = evaluate_answer(
         db=db,
         user_id=user_id,
@@ -225,7 +282,8 @@ def evaluator_node(state: TutorState) -> Dict[str, Any]:
         question_id=question_id or "default_q",
         answer_given=answer_given,
         correct_answer=correct_answer,
-        question_text=question_text
+        question_text=question_text,
+        explanation=question_explanation
     )
 
     remediate = eval_result.get("remediate", False)
@@ -343,7 +401,17 @@ def run_step(
     # For "submit_answer" we stay on the same module so that evaluation and
     # remediation are anchored to the question that was just answered.
     # -----------------------------------------------------------------------
-    should_advance = (action == "next_question") and (current_module_id is not None)
+    # Advance module ONLY when all questions in the current module have been answered
+    should_advance = False
+    if action == "next_question" and current_module_id is not None:
+        mod_questions = crud.get_questions_by_module(db, module_id=current_module_id)
+        if mod_questions:
+            user_attempts = crud.get_attempts_by_user(db, user_id=user_id)
+            answered_ids = set(a.question_id for a in user_attempts)
+            unanswered = [q for q in mod_questions if q.id not in answered_ids]
+            if not unanswered:
+                should_advance = True
+
     new_module_id, current_topic = _resolve_next_module(
         db=db,
         course_id=course_id,

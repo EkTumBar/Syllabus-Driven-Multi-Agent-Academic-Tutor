@@ -31,10 +31,20 @@ def check_is_correct(answer_given: str, correct_answer: str) -> bool:
     if norm_given == norm_correct:
         return True
 
-    # Handle option prefix matches (e.g. "A" vs "A. Some text" or "Option A")
-    if len(norm_given) == 1 and norm_correct.startswith(norm_given):
+    # Strip choice prefixes (e.g. "A. 1" vs "1" or vice-versa)
+    prefixes = ["a. ", "b. ", "c. ", "d. ", "a.", "b.", "c.", "d.", "a) ", "b) ", "c) ", "d) ", "(a)", "(b)", "(c)", "(d)"]
+    for p in prefixes:
+        if norm_correct.startswith(p):
+            if norm_given == norm_correct[len(p):].strip():
+                return True
+        if norm_given.startswith(p):
+            if norm_correct == norm_given[len(p):].strip():
+                return True
+
+    # Handle option letter matches (e.g. "A" vs "A. Some text")
+    if len(norm_given) == 1 and (norm_correct.startswith(f"{norm_given}.") or norm_correct.startswith(f"{norm_given})") or norm_correct.startswith(norm_given)):
         return True
-    if len(norm_correct) == 1 and norm_given.startswith(norm_correct):
+    if len(norm_correct) == 1 and (norm_given.startswith(f"{norm_correct}.") or norm_given.startswith(f"{norm_correct})") or norm_given.startswith(norm_correct)):
         return True
 
     return False
@@ -48,11 +58,13 @@ def evaluate_answer(
     question_id: str,
     answer_given: str,
     correct_answer: str,
-    question_text: str = ""
+    question_text: str = "",
+    explanation: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Evaluates student answer, updates mastery score, checks remediation threshold,
     and records the attempt in Postgres.
+    If pre-stored explanation is provided, returns zero-delay local evaluation.
     """
     is_correct = check_is_correct(answer_given, correct_answer)
 
@@ -92,34 +104,38 @@ def evaluate_answer(
         if last_two_failed or low_mastery_threshold:
             remediate = True
 
-    # Safely release read transaction back to pool before executing LLM generation
-    try:
-        db.commit()
-    except Exception:
-        pass
-
-    # 5. Generate instructional feedback via LLM
+    # 5. Instructional feedback
     feedback = ""
-    try:
-        eval_prompt = f"""Question: {question_text}
+    if explanation and explanation.strip():
+        # Zero-delay: use pre-generated explanation from question bank
+        feedback = explanation.strip()
+    else:
+        # Safely release read transaction back to pool before executing LLM generation
+        try:
+            db.commit()
+        except Exception:
+            pass
+
+        try:
+            eval_prompt = f"""Question: {question_text}
 Student's Answer: {answer_given}
 Correct Answer: {correct_answer}
 Evaluation: {'CORRECT' if is_correct else 'INCORRECT'}
 """
-        response_text = generate(
-            prompt=eval_prompt,
-            system=EVALUATOR_SYSTEM_PROMPT,
-            json_mode=True,
-            temperature=0.2
-        )
-        data = json.loads(response_text)
-        feedback = data.get("feedback", "")
-    except Exception as e:
-        logger.warning("LLM feedback generation fallback: %s", str(e))
-        if is_correct:
-            feedback = "Excellent work! That is the correct answer."
-        else:
-            feedback = f"Incorrect. The correct answer is: {correct_answer}."
+            response_text = generate(
+                prompt=eval_prompt,
+                system=EVALUATOR_SYSTEM_PROMPT,
+                json_mode=True,
+                temperature=0.2
+            )
+            data = json.loads(response_text)
+            feedback = data.get("feedback", "")
+        except Exception as e:
+            logger.warning("LLM feedback generation fallback: %s", str(e))
+            if is_correct:
+                feedback = "Excellent work! That is the correct answer."
+            else:
+                feedback = f"Incorrect. The correct answer is: {correct_answer}."
 
     # 6. Update mastery profile in Postgres
     crud.upsert_mastery(
