@@ -51,7 +51,7 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
   }, [courseId]);
 
   const handleSubmitAnswer = async () => {
-    if (!selectedOption || !currentQuestion) return;
+    if (!selectedOption || !currentQuestion || submitting || evaluation !== null) return;
 
     setSubmitting(true);
     setError('');
@@ -63,12 +63,21 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
       });
 
       const payload = response.data?.payload;
-      if (payload?.evaluation) {
-        setEvaluation(payload.evaluation);
+      const evalData = payload?.evaluation || payload?.last_evaluation;
+      if (evalData) {
+        setEvaluation({
+          ...evalData,
+          remediate: Boolean(evalData.remediate || payload?.type === 'remediation'),
+          guidance: payload?.guidance,
+          review_excerpts: payload?.review_excerpts,
+        });
+      } else {
+        setError('Received an unexpected response format from the tutor. Please try again.');
       }
     } catch (err) {
       console.error('Error submitting answer:', err);
-      setError(err.response?.data?.detail || 'Failed to submit answer.');
+      const detailMsg = err.response?.data?.detail || err.message || 'Failed to submit answer. Please try again.';
+      setError(detailMsg);
     } finally {
       setSubmitting(false);
     }
@@ -185,6 +194,24 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
               );
             })}
           </div>
+
+          {/* Submission Error Banner */}
+          {error && (
+            <div className="mt-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between gap-2 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+                <span>{error}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleSubmitAnswer}
+                disabled={submitting}
+                className="font-semibold text-rose-700 hover:text-rose-900 underline ml-auto text-xs shrink-0"
+              >
+                Retry
+              </button>
+            </div>
+          )}
 
           {/* Submit or Next Question Action */}
           <div className="mt-6 flex items-center justify-between">

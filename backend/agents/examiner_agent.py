@@ -66,20 +66,31 @@ Course Excerpts / Context:
 Generate {num_questions} {target_difficulty}-level multiple choice questions strictly based on the content above.
 """
 
-    response_text = generate(
-        prompt=prompt,
-        system=EXAMINER_SYSTEM_PROMPT,
-        json_mode=True,
-        temperature=0.3
-    )
+    # Release any active transaction so database connection returns to pool while LLM generates quiz
+    if db is not None:
+        try:
+            db.commit()
+        except Exception:
+            pass
+
+    response_text = ""
+    try:
+        response_text = generate(
+            prompt=prompt,
+            system=EXAMINER_SYSTEM_PROMPT,
+            json_mode=True,
+            temperature=0.3
+        )
+    except Exception as llm_err:
+        logger.warning("Examiner LLM generation failed or timed out: %s. Using default question fallback.", str(llm_err))
 
     try:
-        data = json.loads(response_text)
+        data = json.loads(response_text) if response_text else {}
         questions = data.get("questions", [])
-        if not isinstance(questions, list):
-            questions = []
+        if not isinstance(questions, list) or not questions:
+            raise ValueError("No questions parsed from LLM response")
     except Exception as e:
-        logger.error("Failed to parse Examiner JSON output: %s. Response: %s", str(e), response_text)
+        logger.warning("Examiner fallback question triggered: %s", str(e))
         questions = [
             {
                 "question_text": f"What is a primary concept of {topic}?",

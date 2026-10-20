@@ -66,6 +66,12 @@ Related Quiz Question (if any):
 Provide an engaging, clear, and reassuring explanation:
 """
 
+    # Release read transaction back to connection pool before invoking LLM
+    try:
+        db.commit()
+    except Exception:
+        pass
+
     explanation = generate(
         prompt=prompt,
         system=EXPLAINER_SYSTEM_PROMPT,

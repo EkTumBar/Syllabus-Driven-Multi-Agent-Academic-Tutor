@@ -89,6 +89,13 @@ def examiner_node(state: TutorState) -> Dict[str, Any]:
         mastery_record = crud.get_mastery_record(db, user_id=user_id, module_id=module_id, topic=topic)
     mastery_score = mastery_record.score_0to1 if mastery_record else 0.5
 
+    # Commit read transaction to release connection from pool while LLM generates quiz
+    if db:
+        try:
+            db.commit()
+        except Exception:
+            pass
+
     questions = generate_quiz(
         topic=topic,
         context_text=context_text,
@@ -162,7 +169,9 @@ def remediation_node(state: TutorState) -> Dict[str, Any]:
         "topic": topic,
         "guidance": f"We noticed you encountered difficulty with {topic}. Here is a targeted review:",
         "review_excerpts": context_text,
-        "last_evaluation": eval_info
+        "evaluation": eval_info,
+        "last_evaluation": eval_info,
+        "remediate": True
     }
 
     return {
@@ -253,6 +262,13 @@ def run_step(
         "step_output": {},
         "db": db
     }
+
+    # Release initial state read transaction before running target node agent pipeline
+    if db:
+        try:
+            db.commit()
+        except Exception:
+            pass
 
     # 2. Execute target node based on action
     if action == "submit_answer":

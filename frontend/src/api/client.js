@@ -4,6 +4,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 25000, // 25s timeout to prevent indefinite loading buffers
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,10 +22,13 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: handle token expiration / auth errors
+// Response interceptor: handle token expiration / auth errors and timeouts
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      error.message = 'The request timed out while waiting for the AI tutor. Please try again.';
+    }
     if (error.response && error.response.status === 401) {
       // Clear credentials if token is invalid or expired
       localStorage.removeItem('token');

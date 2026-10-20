@@ -1,0 +1,74 @@
+================================================================================
+SUPABASE & DATABASE PORTS AUDIT REPORT
+Project: Syllabus-Driven-Multi-Agent-Academic-Tutor
+Timestamp: 2026-10-20
+================================================================================
+
+1. LOCAL SUPABASE / API GATEWAY PORT
+--------------------------------------------------------------------------------
+Port: 54321
+URL:  http://localhost:54321
+
+File Reference:
+- docker-compose.yml (Line 36):
+  SUPABASE_URL=http://localhost:54321
+
+Details:
+Port 54321 is the default port used by Supabase (Kong API Gateway) for local
+development, including the REST API, Authentication, and Storage endpoints.
+
+
+2. POSTGRESQL / DATABASE CONNECTION PORTS
+--------------------------------------------------------------------------------
+A. Local PostgreSQL Container:
+   Port: 5432
+   Connection String Template:
+     postgresql+psycopg2://postgres:postgrespassword@localhost:5432/syllabustutor
+
+   File References:
+   - docker-compose.yml (Line 13 & 32): ports: "5432:5432"
+   - backend/.env.example (Line 2)
+   - backend/config.py (Line 13)
+   - backend/alembic.ini (Line 55)
+
+B. Hosted / Cloud Supabase Database (PostgreSQL):
+   Port 5432:
+     Direct Session connection mode (best for migrations or persistent connections).
+
+   Port 6543:
+     Transaction Connection Pooler (PgBouncer / Supavisor).
+     Recommended for serverless & cloud hosts (e.g., Render, Vercel) to prevent
+     exhausting database connection limits.
+
+   File Reference:
+   - README.md (Line 68):
+     "use Transaction pooler port 6543 or session port 5432"
+
+
+3. HOSTED SUPABASE HTTPS API PORT
+--------------------------------------------------------------------------------
+Port: 443 (Standard HTTPS)
+URL:  https://[your-project-ref].supabase.co
+
+File References:
+- backend/.env.example (Line 13):
+  SUPABASE_URL=https://your-project.supabase.co
+- backend/storage/file_storage.py (Lines 19-23):
+  Used by the Supabase Python SDK for uploading documents and generating public URLs.
+
+
+4. LOCAL ENVIRONMENT & ACTIVE DAEMON SCAN
+--------------------------------------------------------------------------------
+- Configuration Files:
+  * Only template .env.example files exist in the repository.
+  * No local .env, .env.local, or supabase/config.toml exists.
+- Active TCP Listening Ports:
+  * Ports 5432, 54321, 54322, 54323, and 6543 were audited via system TCP check.
+  * No active local database or Supabase daemons are currently bound to these
+    ports on this machine.
+- Docker:
+  * Docker service / CLI is currently not running in this environment.
+
+================================================================================
+END OF AUDIT REPORT
+================================================================================

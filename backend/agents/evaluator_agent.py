@@ -92,6 +92,12 @@ def evaluate_answer(
         if last_two_failed or low_mastery_threshold:
             remediate = True
 
+    # Safely release read transaction back to pool before executing LLM generation
+    try:
+        db.commit()
+    except Exception:
+        pass
+
     # 5. Generate instructional feedback via LLM
     feedback = ""
     try:

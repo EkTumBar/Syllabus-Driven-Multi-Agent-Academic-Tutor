@@ -1,6 +1,8 @@
 import logging
+import asyncio
 from typing import Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from db.database import get_db
@@ -12,6 +14,8 @@ from agents.orchestrator import run_step
 logger = logging.getLogger("quiz_routes")
 router = APIRouter(tags=["Quiz & Assessment"])
 
+ASSESSMENT_ROUTE_TIMEOUT_SECONDS = 25.0
+
 
 class AnswerSubmission(BaseModel):
     answer_given: str
@@ -19,7 +23,7 @@ class AnswerSubmission(BaseModel):
 
 
 @router.get("/courses/{course_id}/next-question")
-def get_next_question(
+async def get_next_question(
     course_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -31,17 +35,39 @@ def get_next_question(
     if course.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    result = run_step(
-        db=db,
-        course_id=course_id,
-        user_id=current_user.id,
-        step_input={"action": "next_question"}
-    )
-    return result
+    try:
+        result = await asyncio.wait_for(
+            run_in_threadpool(
+                run_step,
+                db=db,
+                course_id=course_id,
+                user_id=current_user.id,
+                step_input={"action": "next_question"}
+            ),
+            timeout=ASSESSMENT_ROUTE_TIMEOUT_SECONDS
+        )
+        return result
+    except asyncio.TimeoutError:
+        logger.error(
+            "Timeout generating next question for course_id=%s, user_id=%s (>%.1fs)",
+            course_id, current_user.id, ASSESSMENT_ROUTE_TIMEOUT_SECONDS
+        )
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Generating the next question timed out. Please try again."
+        )
+    except Exception as e:
+        logger.error("Error generating next question: %s", str(e), exc_info=True)
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate the next question. Please try again."
+        )
 
 
 @router.post("/questions/{question_id}/answer")
-def submit_answer(
+async def submit_answer(
     question_id: str,
     payload: AnswerSubmission,
     db: Session = Depends(get_db),
@@ -66,10 +92,32 @@ def submit_answer(
         "correct_answer": question.correct_answer
     }
 
-    result = run_step(
-        db=db,
-        course_id=course_id,
-        user_id=current_user.id,
-        step_input=step_input
-    )
-    return result
+    try:
+        result = await asyncio.wait_for(
+            run_in_threadpool(
+                run_step,
+                db=db,
+                course_id=course_id,
+                user_id=current_user.id,
+                step_input=step_input
+            ),
+            timeout=ASSESSMENT_ROUTE_TIMEOUT_SECONDS
+        )
+        return result
+    except asyncio.TimeoutError:
+        logger.error(
+            "Timeout evaluating answer for question_id=%s, user_id=%s (>%.1fs)",
+            question_id, current_user.id, ASSESSMENT_ROUTE_TIMEOUT_SECONDS
+        )
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Evaluating your answer timed out. Please try again."
+        )
+    except Exception as e:
+        logger.error("Error evaluating answer: %s", str(e), exc_info=True)
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to evaluate your answer. Please try again."
+        )

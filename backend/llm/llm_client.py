@@ -15,14 +15,14 @@ _client: Optional[genai.Client] = None
 
 
 def get_genai_client() -> genai.Client:
-    """Initializes and returns a cached google-genai Client instance."""
+    """Initializes and returns a cached google-genai Client instance configured with request timeout."""
     global _client
     if _client is None:
         api_key = settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
         if not api_key:
-            # Initialize with empty/dummy key or let SDK read default env
             logger.warning("GEMINI_API_KEY is not configured in settings or environment.")
-        _client = genai.Client(api_key=api_key or "mock_key")
+        http_opts = types.HttpOptions(timeout=settings.LLM_TIMEOUT_SECONDS)
+        _client = genai.Client(api_key=api_key or "mock_key", http_options=http_opts)
     return _client
 
 
@@ -130,7 +130,7 @@ def generate(
                 attempt, max_retries, str(e)
             )
             if attempt < max_retries:
-                backoff_seconds = 2 ** attempt
+                backoff_seconds = min(1.5 * attempt, 3.0)
                 time.sleep(backoff_seconds)
 
     logger.error("All %d Gemini API call attempts failed.", max_retries)

@@ -12,6 +12,13 @@ class Settings(BaseSettings):
         "DATABASE_URL",
         "postgresql+psycopg2://postgres:postgrespassword@localhost:5432/syllabustutor"
     )
+    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "5"))
+    DB_MAX_OVERFLOW: int = int(os.getenv("DB_MAX_OVERFLOW", "10"))
+    DB_POOL_TIMEOUT: int = int(os.getenv("DB_POOL_TIMEOUT", "15"))
+    DB_POOL_RECYCLE: int = int(os.getenv("DB_POOL_RECYCLE", "300"))
+
+    # LLM Settings
+    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "15.0"))
 
     # Gemini
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
