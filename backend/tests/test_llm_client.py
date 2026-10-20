@@ -8,6 +8,7 @@ BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
+from config import settings
 from llm import llm_client
 
 
@@ -35,7 +36,7 @@ def test_generate_text_returns_string():
 
         # Verify config passed to SDK
         args, kwargs = mock_client.models.generate_content.call_args
-        assert kwargs["model"] == "gemini-2.5-flash"
+        assert kwargs["model"] == settings.GEMINI_MODEL
         config = kwargs["config"]
         assert config.system_instruction == "You are an academic tutor."
         assert config.response_mime_type == "text/plain"

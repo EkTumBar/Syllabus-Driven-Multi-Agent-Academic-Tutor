@@ -21,7 +21,8 @@ def get_genai_client() -> genai.Client:
         api_key = settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY")
         if not api_key:
             logger.warning("GEMINI_API_KEY is not configured in settings or environment.")
-        http_opts = types.HttpOptions(timeout=settings.LLM_TIMEOUT_SECONDS)
+        timeout_ms = int(getattr(settings, "LLM_TIMEOUT_SECONDS", 30.0) * 1000)
+        http_opts = types.HttpOptions(timeout=timeout_ms)
         _client = genai.Client(api_key=api_key or "mock_key", http_options=http_opts)
     return _client
 
@@ -132,10 +133,14 @@ def generate(
                 "Gemini API call attempt %d/%d with model '%s' failed: %s",
                 attempt, max_retries, current_model, str(e)
             )
-            # Automatic model fallback if model identifier is 404 not found
-            if ("not found" in err_str or "404" in err_str) and current_model != "gemini-1.5-flash":
-                logger.info("Model '%s' not recognized by Gemini API; switching to 'gemini-1.5-flash'", current_model)
-                current_model = "gemini-1.5-flash"
+            # Automatic model fallback if model identifier is 404 not found or temporary 503 unavailable
+            candidate_fallbacks = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"]
+            if any(term in err_str for term in ["not found", "404", "unavailable", "503"]):
+                for fb in candidate_fallbacks:
+                    if fb != current_model:
+                        logger.info("Model '%s' failed (%s); switching to fallback '%s'", current_model, str(e), fb)
+                        current_model = fb
+                        break
 
             if attempt < max_retries:
                 backoff_seconds = min(1.5 * attempt, 3.0)

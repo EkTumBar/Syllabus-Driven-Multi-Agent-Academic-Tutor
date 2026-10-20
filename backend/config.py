@@ -18,11 +18,11 @@ class Settings(BaseSettings):
     DB_POOL_RECYCLE: int = int(os.getenv("DB_POOL_RECYCLE", "300"))
 
     # LLM Settings
-    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "15.0"))
+    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "30.0"))
 
     # Gemini
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "default_dev_secret_key_change_me")
