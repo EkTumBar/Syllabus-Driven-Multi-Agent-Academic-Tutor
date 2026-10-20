@@ -261,6 +261,7 @@ Return STRICTLY a JSON array containing the {target_count} questions with:
     # Save questions to Supabase / Postgres DB
     if db is not None and module_id is not None:
         saved_records = []
+        start_order = len(existing_questions) if existing_questions else 0
         for idx, q in enumerate(questions):
             record = crud.create_question(
                 db=db,
@@ -270,7 +271,7 @@ Return STRICTLY a JSON array containing the {target_count} questions with:
                 correct_answer=q["correct_answer"],
                 difficulty=q.get("difficulty", "medium"),
                 explanation=q.get("explanation", ""),
-                order_index=idx + 1
+                order_index=start_order + idx + 1
             )
             saved_records.append({
                 "id": record.id,

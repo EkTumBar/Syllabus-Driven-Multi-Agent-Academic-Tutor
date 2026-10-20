@@ -28,6 +28,10 @@ export const Course = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [selectedModuleId, setSelectedModuleId] = useState('');
+  const [generatingModId, setGeneratingModId] = useState(null);
+  const [genCount, setGenCount] = useState(25);
+  const [moduleStatusMsg, setModuleStatusMsg] = useState({});
 
   useEffect(() => {
     const fetchCourseDetails = async () => {
@@ -50,6 +54,27 @@ export const Course = () => {
   const handleExplainTopic = (questionText, topic) => {
     setActiveExplainQuestion(questionText || '');
     setActiveExplainTopic(topic || 'Current Topic');
+  };
+
+  const handleGenerateQuestionsForModule = async (moduleId, count = 25) => {
+    setGeneratingModId(moduleId);
+    setModuleStatusMsg((prev) => ({ ...prev, [moduleId]: '' }));
+    try {
+      const res = await apiClient.post(`/courses/${courseId}/modules/${moduleId}/generate-questions?count=${count}`);
+      setModuleStatusMsg((prev) => ({
+        ...prev,
+        [moduleId]: `Generated ${res.data?.count || count} MCQs successfully!`
+      }));
+      setSelectedModuleId(moduleId);
+    } catch (err) {
+      console.error('Failed to generate questions:', err);
+      setModuleStatusMsg((prev) => ({
+        ...prev,
+        [moduleId]: err.response?.data?.detail || 'Failed to generate question bank.'
+      }));
+    } finally {
+      setGeneratingModId(null);
+    }
   };
 
   const handleDeleteCourse = async () => {
@@ -144,41 +169,100 @@ export const Course = () => {
         <div className="lg:col-span-7 space-y-6">
           <QuizPanel
             courseId={courseId}
+            modules={modules}
+            activeModuleId={selectedModuleId}
+            onModuleSelect={(modId) => setSelectedModuleId(modId)}
             onExplainTopic={handleExplainTopic}
           />
 
           {/* Module Syllabus Preview Accordion */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-xs">
-            <h2 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
-              <Layers className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-              <span>Structured Curriculum Modules</span>
-            </h2>
-
-            <div className="space-y-2">
-              {modules.map((mod, idx) => (
-                <div
-                  key={mod.id || idx}
-                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pb-2 border-b border-slate-100">
+              <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Layers className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <span>Structured Curriculum Modules</span>
+              </h2>
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <span>Batch Size:</span>
+                <select
+                  value={genCount}
+                  onChange={(e) => setGenCount(Number(e.target.value))}
+                  className="px-2 py-1 rounded-lg border border-slate-200 bg-white font-bold text-slate-800 text-xs focus:ring-1 focus:ring-indigo-500"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px] shrink-0">
-                      {idx + 1}
-                    </span>
-                    <span className="font-semibold text-slate-800">{mod.title}</span>
-                  </div>
+                  <option value={20}>20 MCQs</option>
+                  <option value={25}>25 MCQs (Standard)</option>
+                  <option value={30}>30 MCQs</option>
+                  <option value={40}>40 MCQs</option>
+                  <option value={50}>50 MCQs</option>
+                </select>
+              </div>
+            </div>
 
-                  <div className="flex items-center gap-2">
-                    {mod.prerequisites_json && mod.prerequisites_json.length > 0 && (
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        Prereq: {mod.prerequisites_json.join(', ')}
-                      </span>
+            <div className="space-y-3">
+              {modules.map((mod, idx) => {
+                const isCurrent = (mod.id === selectedModuleId);
+                const isGen = (generatingModId === mod.id);
+                const status = moduleStatusMsg[mod.id];
+
+                return (
+                  <div
+                    key={mod.id || idx}
+                    className={`p-3.5 rounded-xl border transition-all ${
+                      isCurrent 
+                        ? 'border-indigo-300 bg-indigo-50/40 ring-1 ring-indigo-200' 
+                        : 'border-slate-100 bg-slate-50/50 hover:border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`w-5 h-5 rounded-full font-bold flex items-center justify-center text-[10px] shrink-0 ${
+                          isCurrent ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-700'
+                        }`}>
+                          {idx + 1}
+                        </span>
+                        <span className="font-semibold text-slate-800">{mod.title}</span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {mod.prerequisites_json && mod.prerequisites_json.length > 0 && (
+                          <span className="text-[10px] text-slate-500 font-medium hidden md:inline">
+                            Prereq: {mod.prerequisites_json.join(', ')}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedModuleId(mod.id)}
+                          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition cursor-pointer ${
+                            isCurrent
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-white hover:bg-indigo-50 text-indigo-600 border border-indigo-200'
+                          }`}
+                        >
+                          {isCurrent ? 'Active Quiz' : 'Practice'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isGen}
+                          onClick={() => handleGenerateQuestionsForModule(mod.id, genCount)}
+                          className="px-2.5 py-1 rounded-lg font-semibold text-[11px] bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title={`Pre-generate a batch of ${genCount} questions for this module`}
+                        >
+                          {isGen ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3 text-indigo-600" />}
+                          <span>Generate ({genCount})</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {status && (
+                      <p className={`mt-2 text-[11px] font-medium ${
+                        status.includes('fail') ? 'text-rose-600' : 'text-emerald-700'
+                      }`}>
+                        {status}
+                      </p>
                     )}
-                    <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                      CBT Question Bank
-                    </span>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

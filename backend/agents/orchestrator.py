@@ -36,11 +36,13 @@ def _resolve_next_module(
     db: Session,
     course_id: str,
     current_module_id: Optional[str],
-    advance: bool = False
+    advance: bool = False,
+    target_module_id: Optional[str] = None
 ) -> tuple[Optional[str], str]:
     """
     Returns (module_id, topic) for the current or next module.
 
+    When target_module_id is provided, switches directly to that module.
     When advance=True the function moves to the module after current_module_id
     by order_index.  If the current module is the last one it wraps back to
     the first (round-robin).  This ensures the quiz always progresses and never
@@ -49,6 +51,11 @@ def _resolve_next_module(
     modules = crud.get_modules_by_course(db, course_id=course_id)
     if not modules:
         return None, "General Overview"
+
+    if target_module_id:
+        target_mod = next((m for m in modules if m.id == target_module_id), None)
+        if target_mod:
+            return target_mod.id, target_mod.title
 
     if not current_module_id:
         # First call — start at the first module
@@ -179,8 +186,67 @@ def examiner_node(state: TutorState) -> Dict[str, Any]:
             answered_q_ids = set(a.question_id for a in attempts)
             unanswered = [q for q in existing_db_questions if q.id not in answered_q_ids]
 
-            chosen_q = unanswered[0] if unanswered else existing_db_questions[0]
-            question_idx = (len(existing_db_questions) - len(unanswered) + 1) if unanswered else len(existing_db_questions)
+            if not unanswered:
+                # All questions in this module are completed!
+                # Check if other modules have questions to answer
+                all_modules = crud.get_modules_by_course(db, course_id=course_id)
+                next_mod_with_qs = None
+                for m in all_modules:
+                    m_qs = crud.get_questions_by_module(db, module_id=m.id)
+                    m_unanswered = [q for q in m_qs if q.id not in answered_q_ids]
+                    if m_unanswered:
+                        next_mod_with_qs = (m, m_unanswered, m_qs)
+                        break
+
+                if next_mod_with_qs:
+                    next_m, next_unanswered, next_all_qs = next_mod_with_qs
+                    chosen_q = next_unanswered[0]
+                    total_q = len(next_all_qs)
+                    question_idx = total_q - len(next_unanswered) + 1
+                    topic = next_m.title
+                    state["current_module_id"] = next_m.id
+                    q_dict = {
+                        "id": chosen_q.id,
+                        "module_id": chosen_q.module_id,
+                        "question_text": chosen_q.question_text,
+                        "options_json": chosen_q.options_json,
+                        "correct_answer": chosen_q.correct_answer,
+                        "difficulty": chosen_q.difficulty,
+                        "explanation": getattr(chosen_q, "explanation", "") or "",
+                        "order_index": getattr(chosen_q, "order_index", 1) or 1
+                    }
+                    questions = [q_dict]
+                    step_output = {
+                        "type": "question",
+                        "topic": topic,
+                        "mastery_score": mastery_score,
+                        "question_index": question_idx,
+                        "total_questions": total_q,
+                        "questions": questions
+                    }
+                    return {
+                        "current_module_id": next_m.id,
+                        "generated_questions": questions,
+                        "step_output": step_output,
+                        "status": "idle"
+                    }
+                else:
+                    # Entire course question bank is finished!
+                    step_output = {
+                        "type": "completed",
+                        "topic": topic,
+                        "message": f"Congratulations! You have completed all questions in {topic} and the entire course.",
+                        "question_index": len(existing_db_questions),
+                        "total_questions": len(existing_db_questions)
+                    }
+                    return {
+                        "generated_questions": [],
+                        "step_output": step_output,
+                        "status": "completed"
+                    }
+
+            chosen_q = unanswered[0]
+            question_idx = len(existing_db_questions) - len(unanswered) + 1
             total_q = len(existing_db_questions)
 
             q_dict = {
@@ -401,9 +467,11 @@ def run_step(
     # For "submit_answer" we stay on the same module so that evaluation and
     # remediation are anchored to the question that was just answered.
     # -----------------------------------------------------------------------
-    # Advance module ONLY when all questions in the current module have been answered
+    # Advance module ONLY when all questions in the current module have been answered,
+    # unless a specific target module_id was explicitly requested in step_input.
+    target_module_id = step_input.get("module_id")
     should_advance = False
-    if action == "next_question" and current_module_id is not None:
+    if action == "next_question" and current_module_id is not None and not target_module_id:
         mod_questions = crud.get_questions_by_module(db, module_id=current_module_id)
         if mod_questions:
             user_attempts = crud.get_attempts_by_user(db, user_id=user_id)
@@ -416,7 +484,8 @@ def run_step(
         db=db,
         course_id=course_id,
         current_module_id=current_module_id,
-        advance=should_advance
+        advance=should_advance,
+        target_module_id=target_module_id
     )
 
     logger.info(

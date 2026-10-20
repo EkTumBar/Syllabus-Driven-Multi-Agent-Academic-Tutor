@@ -25,6 +25,7 @@ class AnswerSubmission(BaseModel):
 @router.get("/courses/{course_id}/next-question")
 async def get_next_question(
     course_id: str,
+    module_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -35,6 +36,10 @@ async def get_next_question(
     if course.user_id != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
+    step_input = {"action": "next_question"}
+    if module_id:
+        step_input["module_id"] = module_id
+
     try:
         result = await asyncio.wait_for(
             run_in_threadpool(
@@ -42,7 +47,7 @@ async def get_next_question(
                 db=db,
                 course_id=course_id,
                 user_id=current_user.id,
-                step_input={"action": "next_question"}
+                step_input=step_input
             ),
             timeout=ASSESSMENT_ROUTE_TIMEOUT_SECONDS
         )
