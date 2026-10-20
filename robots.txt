@@ -1,0 +1,8 @@
+# Robots.txt for Syllabus-Driven Multi-Agent Academic Tutor
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://syllabus-driven-multi-agent-academi.vercel.app/sitemap.xml

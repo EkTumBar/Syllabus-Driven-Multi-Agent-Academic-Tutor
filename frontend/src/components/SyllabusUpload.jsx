@@ -102,12 +102,12 @@ Module 3: Sequence Modeling & Attention Mechanisms
     <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between pb-6 border-b border-slate-100">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600" aria-hidden="true">
             <Upload className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900">Create New Course</h2>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               Paste your syllabus or upload a document/image (.pdf, .doc, .docx, .png, .jpg).
             </p>
           </div>
@@ -124,14 +124,14 @@ Module 3: Sequence Modeling & Attention Mechanisms
 
       {error && (
         <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200/70 flex items-center gap-2 text-red-700 text-sm">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+          <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>
         </div>
       )}
 
       {statusMessage && (
         <div className="mt-4 p-3 rounded-xl bg-indigo-50 border border-indigo-200/70 flex items-center gap-2 text-indigo-700 text-sm animate-pulse">
-          <Sparkles className="w-4 h-4 shrink-0 text-indigo-600" />
+          <Sparkles className="w-4 h-4 shrink-0 text-indigo-600" aria-hidden="true" />
           <span>{statusMessage}</span>
         </div>
       )}
@@ -139,12 +139,15 @@ Module 3: Sequence Modeling & Attention Mechanisms
       <form onSubmit={handleSubmit} className="mt-6 space-y-5">
         {/* Course Title */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+          <label htmlFor="course-title-input" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
             Course Title <span className="text-rose-500">*</span>
           </label>
           <input
+            id="course-title-input"
+            name="course-title"
             type="text"
             required
+            aria-required="true"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. Organic Chemistry II or CS229 Machine Learning"
@@ -155,14 +158,16 @@ Module 3: Sequence Modeling & Attention Mechanisms
         {/* Syllabus Text (Optional if file attached) */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
+            <label htmlFor="syllabus-content-input" className="block text-xs font-semibold uppercase tracking-wider text-slate-700">
               Syllabus Content or Topic Breakdown
             </label>
-            <span className="text-[11px] text-slate-400 font-medium">
+            <span className="text-[11px] text-slate-600 font-medium">
               {attachedFile ? 'Optional (file attached)' : 'Required if no file uploaded'}
             </span>
           </div>
           <textarea
+            id="syllabus-content-input"
+            name="syllabus-content"
             rows={5}
             value={syllabusRaw}
             onChange={(e) => setSyllabusRaw(e.target.value)}
@@ -173,24 +178,27 @@ Module 3: Sequence Modeling & Attention Mechanisms
 
         {/* File Upload: PDF, Word DOCX, Images */}
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
+          <label htmlFor="syllabus-file-input" className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
             Attach Document or Image (.pdf, .doc, .docx, .png, .jpg, .jpeg)
           </label>
           <div className="relative border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-xl p-5 transition-colors text-center cursor-pointer bg-slate-50/50 hover:bg-indigo-50/20">
             <input
+              id="syllabus-file-input"
+              name="syllabus-file"
               type="file"
               accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg"
               onChange={handleFileChange}
+              aria-label="Upload syllabus document or image file (.pdf, .doc, .docx, .png, .jpg, .jpeg)"
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             />
             <div className="flex flex-col items-center justify-center gap-1.5 text-slate-600">
-              <div className="flex items-center gap-2 text-slate-400">
+              <div className="flex items-center gap-2 text-slate-500" aria-hidden="true">
                 <FileText className="w-5 h-5" />
                 <ImageIcon className="w-5 h-5" />
               </div>
               {attachedFile ? (
-                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" aria-hidden="true" />
                   <span>{attachedFile.name} ({(attachedFile.size / 1024 / 1024).toFixed(2)} MB)</span>
                   <button
                     type="button"
@@ -199,10 +207,11 @@ Module 3: Sequence Modeling & Attention Mechanisms
                       e.stopPropagation();
                       setAttachedFile(null);
                     }}
-                    className="ml-1 text-slate-400 hover:text-rose-600"
+                    className="ml-1 text-slate-500 hover:text-rose-600 p-0.5 rounded"
                     title="Remove file"
+                    aria-label="Remove attached file"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
                 </div>
               ) : (
@@ -210,7 +219,7 @@ Module 3: Sequence Modeling & Attention Mechanisms
                   <span className="text-xs font-medium text-slate-700">
                     Click or drag & drop syllabus document or image
                   </span>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-slate-600">
                     Supported: PDF, Word (.doc, .docx), PNG, JPG up to 25 MB
                   </span>
                 </>
@@ -227,12 +236,12 @@ Module 3: Sequence Modeling & Attention Mechanisms
         >
           {loading ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
               <span>Analyzing Document & Structuring Curriculum...</span>
             </>
           ) : (
             <>
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4" aria-hidden="true" />
               <span>Generate Course & Learning Modules</span>
             </>
           )}

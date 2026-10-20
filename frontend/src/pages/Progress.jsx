@@ -9,13 +9,13 @@ export const Progress = () => {
       <div className="flex items-center justify-between">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-semibold mb-2">
-            <Award className="w-3.5 h-3.5" />
+            <Award className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Postgres-Backed Mastery Profile</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900">
             Student Learning Mastery & Analytics
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-600 mt-1">
             Real-time tracking computed by the Evaluator Agent across all completed assessments
           </p>
         </div>

@@ -89,9 +89,9 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
   if (loading) {
     return (
       <div className="bg-white rounded-2xl p-8 border border-slate-200/80 shadow-sm flex flex-col items-center justify-center min-h-[380px]">
-        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-3" />
+        <Loader2 className="w-8 h-8 text-indigo-600 animate-spin mb-3" aria-hidden="true" />
         <p className="text-sm font-semibold text-slate-800">Examiner Agent Generating Calibrated Question...</p>
-        <p className="text-xs text-slate-400 mt-1">Retrieving lecture context and evaluating your mastery curve</p>
+        <p className="text-xs text-slate-600 mt-1">Retrieving lecture context and evaluating your mastery curve</p>
       </div>
     );
   }
@@ -99,11 +99,13 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
   if (error && !currentQuestion) {
     return (
       <div className="bg-white rounded-2xl p-8 border border-slate-200/80 shadow-sm text-center">
-        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
-        <h3 className="text-base font-bold text-slate-800">Quiz Generation Notice</h3>
-        <p className="text-xs text-slate-500 mt-1.5 max-w-md mx-auto">{error}</p>
+        <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto mb-3" aria-hidden="true" />
+        <h2 className="text-base font-bold text-slate-800">Quiz Generation Notice</h2>
+        <p className="text-xs text-slate-600 mt-1.5 max-w-md mx-auto">{error}</p>
         <button
+          type="button"
           onClick={fetchNextQuestion}
+          aria-label="Retry quiz question generation"
           className="mt-5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition"
         >
           Try Again
@@ -117,12 +119,12 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
       {/* Header Info */}
       <div className="flex items-center justify-between pb-5 border-b border-slate-100">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+          <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600" aria-hidden="true">
             <HelpCircle className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Adaptive Assessment</h3>
-            <p className="text-xs text-slate-400">Dynamic difficulty calibrated by Gemini</p>
+            <h2 className="text-sm font-bold text-slate-900">Adaptive Assessment</h2>
+            <p className="text-xs text-slate-600">Dynamic difficulty calibrated by Gemini</p>
           </div>
         </div>
 
@@ -141,7 +143,7 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
           </p>
 
           {/* Options */}
-          <div className="mt-5 space-y-2.5">
+          <div className="mt-5 space-y-2.5" role="radiogroup" aria-label="Question answer choices">
             {currentQuestion.options_json?.map((option, idx) => {
               const isSelected = selectedOption === option;
               const isEvaluated = evaluation !== null;
@@ -163,19 +165,21 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
                 <button
                   key={idx}
                   type="button"
+                  role="radio"
+                  aria-checked={isSelected}
                   disabled={isEvaluated || submitting}
                   onClick={() => setSelectedOption(option)}
                   className={`w-full p-4 rounded-xl border text-left text-sm transition flex items-center justify-between ${optionStyle}`}
                 >
                   <span>{option}</span>
                   {isSelected && !isEvaluated && (
-                    <div className="w-2 h-2 rounded-full bg-indigo-600"></div>
+                    <div className="w-2 h-2 rounded-full bg-indigo-600" aria-hidden="true"></div>
                   )}
                   {isEvaluated && isSelected && evaluation.is_correct && (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
                   )}
                   {isEvaluated && isSelected && !evaluation.is_correct && (
-                    <XCircle className="w-5 h-5 text-rose-600" />
+                    <XCircle className="w-5 h-5 text-rose-600" aria-hidden="true" />
                   )}
                 </button>
               );
@@ -189,17 +193,18 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
                 type="button"
                 disabled={!selectedOption || submitting}
                 onClick={handleSubmitAnswer}
+                aria-label="Submit Answer"
                 className="w-full sm:w-auto ml-auto px-6 py-2.5 rounded-xl font-semibold text-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
               >
                 {submitting ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                     <span>Grading with Evaluator...</span>
                   </>
                 ) : (
                   <>
                     <span>Submit Answer</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
                   </>
                 )}
               </button>
@@ -207,10 +212,11 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
               <button
                 type="button"
                 onClick={fetchNextQuestion}
+                aria-label="Continue to Next Question"
                 className="w-full sm:w-auto ml-auto px-6 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 shadow-md transition flex items-center justify-center gap-2"
               >
                 <span>Continue to Next Question</span>
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -227,9 +233,9 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               {evaluation.is_correct ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" aria-hidden="true" />
               ) : (
-                <XCircle className="w-5 h-5 text-rose-600" />
+                <XCircle className="w-5 h-5 text-rose-600" aria-hidden="true" />
               )}
               <span className="font-bold text-sm">
                 {evaluation.is_correct ? 'Correct! Well Done.' : 'Incorrect Response'}
@@ -237,7 +243,7 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
             </div>
 
             <div className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-white border border-slate-200/60 shadow-2xs">
-              <Award className="w-3.5 h-3.5 text-indigo-600" />
+              <Award className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
               <span>Mastery: {(evaluation.mastery_score * 100).toFixed(0)}%</span>
               <span className={evaluation.is_correct ? 'text-emerald-600' : 'text-rose-600'}>
                 ({evaluation.score_change > 0 ? `+${evaluation.score_change}` : evaluation.score_change})
@@ -253,7 +259,7 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
           {evaluation.remediate && (
             <div className="mt-4 p-3.5 rounded-xl bg-amber-100/80 border border-amber-300/80 flex items-start justify-between gap-3 text-amber-900">
               <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
                 <div className="text-xs">
                   <span className="font-bold">Adaptive Remediation Triggered:</span>
                   <p className="mt-0.5 text-amber-800">
@@ -266,9 +272,10 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
                 <button
                   type="button"
                   onClick={() => onExplainTopic(currentQuestion?.question_text, currentQuestion?.topic || 'this concept')}
+                  aria-label="Explain Concept with Socratic AI Tutor"
                   className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white transition shadow-xs flex items-center gap-1.5"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Explain Concept</span>
                 </button>
               )}

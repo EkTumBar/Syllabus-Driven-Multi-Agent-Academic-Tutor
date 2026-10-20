@@ -18,7 +18,7 @@ const AppLayout = () => {
       <main className="flex-1">
         <Outlet />
       </main>
-      <footer className="py-6 border-t border-slate-200 bg-white/50 text-center text-xs text-slate-400">
+      <footer className="py-6 border-t border-slate-200 bg-white/50 text-center text-xs text-slate-600">
         <p>Syllabus-Driven Multi-Agent Academic Tutor • Powered by Google Gemini & LangGraph</p>
       </footer>
     </div>

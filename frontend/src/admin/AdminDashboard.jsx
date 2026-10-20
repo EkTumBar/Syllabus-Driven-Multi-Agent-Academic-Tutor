@@ -29,8 +29,11 @@ export const AdminDashboard = () => {
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl backdrop-blur-md border border-white/10 shrink-0">
+        <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-2xl backdrop-blur-md border border-white/10 shrink-0" role="tablist" aria-label="Administrator Navigation Tabs">
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'users'}
             onClick={() => setActiveTab('users')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
               activeTab === 'users'
@@ -38,10 +41,13 @@ export const AdminDashboard = () => {
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            <Users className="w-3.5 h-3.5" />
+            <Users className="w-3.5 h-3.5" aria-hidden="true" />
             <span>User Management</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'logs'}
             onClick={() => setActiveTab('logs')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
               activeTab === 'logs'
@@ -49,7 +55,7 @@ export const AdminDashboard = () => {
                 : 'text-slate-300 hover:text-white'
             }`}
           >
-            <ScrollText className="w-3.5 h-3.5" />
+            <ScrollText className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Audit Logs</span>
           </button>
         </div>

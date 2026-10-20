@@ -65,7 +65,7 @@ export function AuthPage({ onAuthSuccess }) {
         {/* Sliding Card Container */}
         <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-2xl overflow-hidden relative">
           {/* Mode Switcher Buttons */}
-          <div className="relative flex p-1 bg-slate-950/80 rounded-2xl border border-slate-800/80 mb-6">
+          <div className="relative flex p-1 bg-slate-950/80 rounded-2xl border border-slate-800/80 mb-6" role="tablist" aria-label="Authentication Mode">
             {/* Sliding highlight indicator */}
             <motion.div
               className="absolute top-1 bottom-1 bg-gradient-to-r from-sky-500 to-indigo-600 rounded-xl"
@@ -78,6 +78,8 @@ export function AuthPage({ onAuthSuccess }) {
             />
             <button
               type="button"
+              role="tab"
+              aria-selected={isLogin}
               onClick={() => toggleMode(true)}
               className={`relative z-10 w-1/2 py-2 text-xs font-semibold rounded-xl transition-colors ${
                 isLogin ? 'text-white' : 'text-slate-400 hover:text-slate-200'
@@ -87,6 +89,8 @@ export function AuthPage({ onAuthSuccess }) {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={!isLogin}
               onClick={() => toggleMode(false)}
               className={`relative z-10 w-1/2 py-2 text-xs font-semibold rounded-xl transition-colors ${
                 !isLogin ? 'text-white' : 'text-slate-400 hover:text-slate-200'
@@ -103,7 +107,7 @@ export function AuthPage({ onAuthSuccess }) {
               animate={{ opacity: 1, y: 0 }}
               className="mb-6 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5"
             >
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
               <span>{error}</span>
             </motion.div>
           )}
@@ -120,47 +124,53 @@ export function AuthPage({ onAuthSuccess }) {
               className="space-y-4"
             >
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label htmlFor="auth-email-input" className="block text-xs font-medium text-slate-300 mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
                   <input
+                    id="auth-email-input"
+                    name="email"
                     type="email"
                     required
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="student@university.edu"
-                    className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+                    className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                <label htmlFor="auth-password-input" className="block text-xs font-medium text-slate-300 mb-1.5">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
                   <input
+                    id="auth-password-input"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     required
+                    autoComplete={isLogin ? 'current-password' : 'new-password'}
                     minLength={6}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
+                    className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors focus:outline-none"
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors focus:outline-none"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? (
-                      <EyeOff className="w-4 h-4" />
+                      <EyeOff className="w-4 h-4" aria-hidden="true" />
                     ) : (
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-4 h-4" aria-hidden="true" />
                     )}
                   </button>
                 </div>
@@ -174,12 +184,14 @@ export function AuthPage({ onAuthSuccess }) {
                   exit={{ opacity: 0, height: 0 }}
                   className="pt-1"
                 >
-                  <label className="block text-xs font-medium text-slate-300 mb-2">
+                  <span className="block text-xs font-medium text-slate-300 mb-2">
                     Account Role
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  </span>
+                  <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label="Account Role">
                     <button
                       type="button"
+                      role="radio"
+                      aria-checked={role === 'student'}
                       onClick={() => setRole('student')}
                       className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-xs font-medium ${
                         role === 'student'
@@ -187,11 +199,13 @@ export function AuthPage({ onAuthSuccess }) {
                           : 'border-slate-800 bg-slate-950/50 text-slate-400 hover:border-slate-700'
                       }`}
                     >
-                      <UserCheck className="w-4 h-4" />
+                      <UserCheck className="w-4 h-4" aria-hidden="true" />
                       <span>Student</span>
                     </button>
                     <button
                       type="button"
+                      role="radio"
+                      aria-checked={role === 'admin'}
                       onClick={() => setRole('admin')}
                       className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-xs font-medium ${
                         role === 'admin'
@@ -199,7 +213,7 @@ export function AuthPage({ onAuthSuccess }) {
                           : 'border-slate-800 bg-slate-950/50 text-slate-400 hover:border-slate-700'
                       }`}
                     >
-                      <ShieldCheck className="w-4 h-4" />
+                      <ShieldCheck className="w-4 h-4" aria-hidden="true" />
                       <span>Admin</span>
                     </button>
                   </div>
@@ -213,13 +227,13 @@ export function AuthPage({ onAuthSuccess }) {
               >
                 {loading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
                     <span>Please wait...</span>
                   </>
                 ) : (
                   <>
                     <span>{isLogin ? 'Sign In' : 'Create Account'}</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
                   </>
                 )}
               </button>
@@ -228,7 +242,7 @@ export function AuthPage({ onAuthSuccess }) {
         </div>
 
         {/* Footer info */}
-        <div className="mt-6 text-center text-xs text-slate-500">
+        <div className="mt-6 text-center text-xs text-slate-400">
           Role-Based Access Control • Multi-Tenant Data Isolation
         </div>
       </div>
