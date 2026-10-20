@@ -28,6 +28,57 @@ class TutorState(TypedDict, total=False):
     db: Any  # Session reference
 
 
+# ---------------------------------------------------------------------------
+# Module advancement helper
+# ---------------------------------------------------------------------------
+
+def _resolve_next_module(
+    db: Session,
+    course_id: str,
+    current_module_id: Optional[str],
+    advance: bool = False
+) -> tuple[Optional[str], str]:
+    """
+    Returns (module_id, topic) for the current or next module.
+
+    When advance=True the function moves to the module after current_module_id
+    by order_index.  If the current module is the last one it wraps back to
+    the first (round-robin).  This ensures the quiz always progresses and never
+    silently loops on the same module.
+    """
+    modules = crud.get_modules_by_course(db, course_id=course_id)
+    if not modules:
+        return None, "General Overview"
+
+    if not current_module_id:
+        # First call — start at the first module
+        return modules[0].id, modules[0].title
+
+    # Find the current module position
+    current_idx = next(
+        (i for i, m in enumerate(modules) if m.id == current_module_id), None
+    )
+
+    if not advance or current_idx is None:
+        # Stay on the same module (e.g. first load or after remediation)
+        mod = modules[current_idx] if current_idx is not None else modules[0]
+        return mod.id, mod.title
+
+    # Advance: move to the next module in order (wrap-around)
+    next_idx = (current_idx + 1) % len(modules)
+    next_mod = modules[next_idx]
+    logger.info(
+        "Module advancement: '%s' (idx=%d) -> '%s' (idx=%d) for course_id=%s",
+        modules[current_idx].title, current_idx,
+        next_mod.title, next_idx, course_id
+    )
+    return next_mod.id, next_mod.title
+
+
+# ---------------------------------------------------------------------------
+# Node implementations
+# ---------------------------------------------------------------------------
+
 def planner_node(state: TutorState) -> Dict[str, Any]:
     """Extracts modules from course syllabus if not already planned."""
     db: Session = state.get("db")
@@ -38,15 +89,29 @@ def planner_node(state: TutorState) -> Dict[str, Any]:
         course = crud.get_course(db, course_id=course_id)
         syllabus_text = course.syllabus_raw if course else ""
         if syllabus_text:
-            plan_syllabus(syllabus_raw=syllabus_text, course_id=course_id, db=db)
+            try:
+                plan_syllabus(syllabus_raw=syllabus_text, course_id=course_id, db=db)
+            except Exception as e:
+                logger.error("Planner agent failed during run_step: %s", str(e), exc_info=True)
+                crud.create_module(
+                    db=db,
+                    course_id=course_id,
+                    title="Module 1: General Course Content",
+                    order_index=1
+                )
             modules = crud.get_modules_by_course(db, course_id=course_id)
 
     current_module_id = state.get("current_module_id")
     current_topic = state.get("current_topic")
 
+    # If this is the very first question, pick the first module
     if modules and not current_module_id:
         current_module_id = modules[0].id
         current_topic = modules[0].title
+        logger.info(
+            "Planner starting at first module '%s' for course_id=%s",
+            current_topic, course_id
+        )
 
     return {
         "current_module_id": current_module_id,
@@ -70,8 +135,23 @@ def researcher_node(state: TutorState) -> Dict[str, Any]:
         top_k=4
     )
 
+    context_text = research_result.get("context_text", "")
+    excerpts_count = len(research_result.get("excerpts", []))
+
+    if not context_text.strip():
+        logger.warning(
+            "Researcher returned EMPTY context for topic='%s', course_id=%s. "
+            "Check that document_chunks are indexed for this course.",
+            topic, course_id
+        )
+    else:
+        logger.info(
+            "Researcher retrieved %d chunks (%d chars) for topic='%s', course_id=%s",
+            excerpts_count, len(context_text), topic, course_id
+        )
+
     return {
-        "context_text": research_result.get("context_text", ""),
+        "context_text": context_text,
         "status": "examining" if not remediate else "remediating"
     }
 
@@ -112,6 +192,11 @@ def examiner_node(state: TutorState) -> Dict[str, Any]:
         "questions": questions
     }
 
+    logger.info(
+        "Examiner produced %d question(s) for topic='%s', mastery=%.2f",
+        len(questions), topic, mastery_score
+    )
+
     return {
         "generated_questions": questions,
         "step_output": step_output,
@@ -147,6 +232,7 @@ def evaluator_node(state: TutorState) -> Dict[str, Any]:
     step_output = {
         "type": "evaluation",
         "evaluation": eval_result,
+        "last_evaluation": eval_result,
         "remediate": remediate
     }
 
@@ -231,27 +317,52 @@ def run_step(
     """
     Loads state from Postgres, executes the appropriate state machine step,
     persists updated state back to Postgres, and returns the response payload.
+
+    Session progression logic:
+    - On "next_question": advance to the next module after each submission so
+      the quiz cycles through all modules (round-robin by order_index).
+    - On "submit_answer": stay on the current module for evaluation.
+    - The current module is persisted to OrchestratorState after every step.
     """
     step_input = step_input or {}
     action = step_input.get("action", "next_question")
 
+    # -----------------------------------------------------------------------
     # 1. Load state from Postgres
+    # -----------------------------------------------------------------------
     db_state = crud.get_orchestrator_state(db, user_id=user_id, course_id=course_id)
     current_module_id = db_state.current_module if db_state else None
     last_eval = db_state.last_evaluation if db_state else None
     status = db_state.status if db_state else "idle"
 
-    # Resolve module title/topic
-    current_topic = "General Overview"
-    if current_module_id:
-        mod = crud.get_module(db, module_id=current_module_id)
-        if mod:
-            current_topic = mod.title
+    # -----------------------------------------------------------------------
+    # 2. Module advancement
+    # For "next_question" we advance to the next module so the session
+    # progresses.  A None current_module_id means "first question ever" — we
+    # pick module 0 without incrementing.
+    # For "submit_answer" we stay on the same module so that evaluation and
+    # remediation are anchored to the question that was just answered.
+    # -----------------------------------------------------------------------
+    should_advance = (action == "next_question") and (current_module_id is not None)
+    new_module_id, current_topic = _resolve_next_module(
+        db=db,
+        course_id=course_id,
+        current_module_id=current_module_id,
+        advance=should_advance
+    )
 
+    logger.info(
+        "run_step: action='%s', prev_module='%s', resolved_module='%s' ('%s'), user_id=%s",
+        action, current_module_id, new_module_id, current_topic, user_id
+    )
+
+    # -----------------------------------------------------------------------
+    # 3. Build initial state
+    # -----------------------------------------------------------------------
     initial_state: TutorState = {
         "course_id": course_id,
         "user_id": user_id,
-        "current_module_id": current_module_id,
+        "current_module_id": new_module_id,
         "current_topic": current_topic,
         "last_evaluation": last_eval,
         "context_text": "",
@@ -270,45 +381,56 @@ def run_step(
         except Exception:
             pass
 
-    # 2. Execute target node based on action
+    # -----------------------------------------------------------------------
+    # 4. Execute target node based on action
+    # -----------------------------------------------------------------------
     if action == "submit_answer":
         # Run evaluator node and conditional edge
         eval_out = evaluator_node(initial_state)
         initial_state.update(eval_out)
         if initial_state.get("remediate", False):
-            # Also fetch remediation context
+            # Fetch remediation context from vector store for the current topic
             research_out = researcher_node(initial_state)
             initial_state.update(research_out)
             remed_out = remediation_node(initial_state)
             initial_state.update(remed_out)
     else:
-        # Standard question / next step generation
+        # Standard next-question generation: plan -> research -> examine
         plan_out = planner_node(initial_state)
         initial_state.update(plan_out)
+        # Use the module resolved by planner (it may have created modules on first call)
+        new_module_id = initial_state.get("current_module_id", new_module_id)
         research_out = researcher_node(initial_state)
         initial_state.update(research_out)
         exam_out = examiner_node(initial_state)
         initial_state.update(exam_out)
 
     final_output = initial_state.get("step_output", {})
-    new_module_id = initial_state.get("current_module_id")
+    final_module_id = initial_state.get("current_module_id", new_module_id)
     new_eval = initial_state.get("last_evaluation")
     new_status = initial_state.get("status", "idle")
 
-    # 3. Save state to Postgres
+    # -----------------------------------------------------------------------
+    # 5. Persist updated state (including the advanced module pointer)
+    # -----------------------------------------------------------------------
     crud.upsert_orchestrator_state(
         db=db,
         user_id=user_id,
         course_id=course_id,
-        current_module=new_module_id,
+        current_module=final_module_id,
         last_evaluation=new_eval,
         status=new_status
+    )
+
+    logger.info(
+        "run_step complete: action='%s', final_module='%s', status='%s', user_id=%s",
+        action, final_module_id, new_status, user_id
     )
 
     return {
         "course_id": course_id,
         "user_id": user_id,
-        "current_module_id": new_module_id,
+        "current_module_id": final_module_id,
         "status": new_status,
         "payload": final_output
     }

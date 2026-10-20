@@ -17,28 +17,42 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [currentTopic, setCurrentTopic] = useState('');
   const [selectedOption, setSelectedOption] = useState('');
   const [evaluation, setEvaluation] = useState(null);
   const [error, setError] = useState('');
+  const [contextWarning, setContextWarning] = useState(false);
 
   const fetchNextQuestion = async () => {
     setLoading(true);
     setError('');
     setEvaluation(null);
     setSelectedOption('');
+    setCurrentQuestion(null); // clear stale question immediately so spinner shows
+    setContextWarning(false);
 
     try {
       const response = await apiClient.get(`/courses/${courseId}/next-question`);
-      const payload = response.data?.payload;
+      const data = response.data;
+      const payload = data?.payload;
 
       if (payload && payload.questions && payload.questions.length > 0) {
-        setCurrentQuestion(payload.questions[0]);
+        const q = payload.questions[0];
+        setCurrentQuestion(q);
+        setCurrentTopic(payload.topic || data?.current_module_id || '');
+
+        // Detect fallback question: explanation mentions AI could not use context
+        const explanation = q.explanation || '';
+        if (explanation.includes('Fallback question') || explanation.includes('could not generate a context-specific')) {
+          setContextWarning(true);
+        }
       } else {
-        setError('No active questions found for this module. Try creating another module or uploading syllabus.');
+        setError('No active questions found for this module. Try creating another module or uploading syllabus content.');
       }
     } catch (err) {
       console.error('Error fetching question:', err);
-      setError(err.response?.data?.detail || 'Failed to load question. Please try again.');
+      const detail = err.response?.data?.detail || err.message || 'Failed to load question. Please try again.';
+      setError(detail);
     } finally {
       setLoading(false);
     }
@@ -133,7 +147,9 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-900">Adaptive Assessment</h2>
-            <p className="text-xs text-slate-600">Dynamic difficulty calibrated by Gemini</p>
+            <p className="text-xs text-slate-600">
+              {currentTopic ? `Topic: ${currentTopic}` : 'Dynamic difficulty calibrated by Gemini'}
+            </p>
           </div>
         </div>
 
@@ -143,6 +159,17 @@ export const QuizPanel = ({ courseId, onExplainTopic }) => {
           </span>
         )}
       </div>
+
+      {/* Context Warning Banner — shown when PDF context was unavailable */}
+      {contextWarning && (
+        <div className="mt-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+          <BookOpen className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>
+            <strong>No PDF context found for this topic.</strong> The question above is a generic placeholder.
+            Please ensure your course PDF was uploaded and indexed when creating the course.
+          </span>
+        </div>
+      )}
 
       {/* Question Stem */}
       {currentQuestion && (
