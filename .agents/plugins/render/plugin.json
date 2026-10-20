@@ -1,0 +1,4 @@
+{
+  "name": "render",
+  "description": "Official Render integration for monitoring deployments, inspecting logs, and managing services."
+}
