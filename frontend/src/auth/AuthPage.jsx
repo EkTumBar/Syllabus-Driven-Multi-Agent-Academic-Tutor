@@ -17,6 +17,7 @@ import {
   Info
 } from 'lucide-react';
 import { useAuth } from './useAuth';
+import { supabase } from '../supabaseClient';
 
 export function AuthPage({ onAuthSuccess }) {
   // Ensure default state is strictly "Sign In" with empty input fields
@@ -192,10 +193,38 @@ export function AuthPage({ onAuthSuccess }) {
   };
 
   // SSO Authentication Handler
-  const handleSSOClick = (provider) => {
+  const handleSSOClick = async (provider) => {
     setError(null);
     setSuccessMessage(null);
     setSsoFeedback(`Connecting to ${provider} Single Sign-On...`);
+
+    const providerKey = provider.toLowerCase();
+    if (!supabase) {
+      const msg = 'Supabase client is not initialized. Please verify VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.';
+      console.error('[SSO Error]', msg);
+      setError(msg);
+      setSsoFeedback(null);
+      return;
+    }
+
+    try {
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: providerKey === 'google' ? 'google' : providerKey,
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+
+      if (oauthError) {
+        console.error(`[SSO Error] Failed to initiate ${provider} sign-in:`, oauthError);
+        setError(oauthError.message || `Failed to connect to ${provider} SSO.`);
+        setSsoFeedback(null);
+      }
+    } catch (err) {
+      console.error(`[SSO Error] Unexpected exception during ${provider} sign-in:`, err);
+      setError(err?.message || `Unexpected error connecting to ${provider} SSO.`);
+      setSsoFeedback(null);
+    }
   };
 
   return (

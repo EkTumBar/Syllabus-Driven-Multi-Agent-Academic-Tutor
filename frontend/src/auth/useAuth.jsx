@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/client';
 import { getUserRole, getRoleBadgeStyle, getRoleAccessLevel } from './roleUtils';
 
+import { supabase } from '../supabaseClient';
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -20,6 +22,57 @@ export function AuthProvider({ children }) {
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
 
+    // Check for active Supabase session (e.g. from Google OAuth redirect)
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session && !localStorage.getItem('token')) {
+          const supabaseToken = session.access_token;
+          const u = session.user;
+          const fullName = u.user_metadata?.full_name || '';
+          const nameParts = fullName.split(' ');
+          const mapped = {
+            id: u.id,
+            email: u.email,
+            role: u.user_metadata?.role || 'student',
+            first_name: u.user_metadata?.first_name || nameParts[0] || '',
+            last_name: u.user_metadata?.last_name || nameParts.slice(1).join(' ') || '',
+            avatar_url: u.user_metadata?.avatar_url || '',
+          };
+          localStorage.setItem('token', supabaseToken);
+          localStorage.setItem('user', JSON.stringify(mapped));
+          setToken(supabaseToken);
+          setUser(mapped);
+        }
+      }).catch((err) => console.warn('[Supabase session check]', err));
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          const supabaseToken = session.access_token;
+          const u = session.user;
+          const fullName = u.user_metadata?.full_name || '';
+          const nameParts = fullName.split(' ');
+          const mapped = {
+            id: u.id,
+            email: u.email,
+            role: u.user_metadata?.role || 'student',
+            first_name: u.user_metadata?.first_name || nameParts[0] || '',
+            last_name: u.user_metadata?.last_name || nameParts.slice(1).join(' ') || '',
+            avatar_url: u.user_metadata?.avatar_url || '',
+          };
+          localStorage.setItem('token', supabaseToken);
+          localStorage.setItem('user', JSON.stringify(mapped));
+          setToken(supabaseToken);
+          setUser(mapped);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setToken(null);
+        }
+      });
+
+      // Cleanup listener on unmount
+      var unsub = () => subscription?.unsubscribe();
+    }
+
     // Verify existing token on mount
     if (token) {
       api.get('/auth/me')
@@ -28,10 +81,13 @@ export function AuthProvider({ children }) {
           localStorage.setItem('user', JSON.stringify(res.data));
         })
         .catch(() => {
-          setUser(null);
-          setToken(null);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+          // If the token was a valid Supabase OAuth token, avoid clobbering user
+          if (!supabase) {
+            setUser(null);
+            setToken(null);
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+          }
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -40,6 +96,7 @@ export function AuthProvider({ children }) {
 
     return () => {
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
+      if (unsub) unsub();
     };
   }, [token]);
 
