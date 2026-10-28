@@ -15,8 +15,16 @@ app = FastAPI(
 )
 
 # CORS Middleware setup
+configured_origins = [
+    o.strip()
+    for o in settings.CORS_ORIGIN.split(",")
+    if o.strip()
+] if settings.CORS_ORIGIN else []
+
 raw_origins = [
-    settings.CORS_ORIGIN,
+    *configured_origins,
+    "https://syllabus-driven-multi-agent-academi.vercel.app",
+    "https://syllabus-driven-multi-agent-academic.vercel.app",
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
@@ -25,12 +33,12 @@ raw_origins = [
     "http://127.0.0.1:8000",
 ]
 # Exclude invalid wildcard '*' when allow_credentials=True
-origins = list(dict.fromkeys(o.strip() for o in raw_origins if o and o.strip() and o.strip() != "*"))
+origins = list(dict.fromkeys(o.rstrip("/") for o in raw_origins if o and o != "*"))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://syllabus-driven-multi-agent-.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

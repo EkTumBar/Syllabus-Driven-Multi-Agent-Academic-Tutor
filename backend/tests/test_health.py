@@ -21,3 +21,19 @@ def test_root_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data.get("status") == "running"
+
+
+def test_cors_preflight_vercel():
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "https://syllabus-driven-multi-agent-academi.vercel.app",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "https://syllabus-driven-multi-agent-academi.vercel.app"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+    assert "GET" in response.headers.get("access-control-allow-methods", "")
+
