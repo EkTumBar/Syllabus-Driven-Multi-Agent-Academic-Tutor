@@ -8,15 +8,15 @@ export const Progress = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-semibold mb-2">
-            <Award className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Postgres-Backed Mastery Profile</span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs font-semibold mb-2">
+            <Award className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" aria-hidden="true" />
+            <span>Postgres-Backed Mastery & Curriculum Analytics</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">
+          <h1 className="text-2xl sm:text-3xl font-black text-[var(--text-primary)]">
             Student Learning Mastery & Analytics
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            Real-time tracking computed by the Evaluator Agent across all completed assessments
+          <p className="text-xs sm:text-sm text-[var(--text-secondary)] mt-1">
+            Real-time tracking computed by the Evaluator Agent across all enrolled curricula
           </p>
         </div>
       </div>

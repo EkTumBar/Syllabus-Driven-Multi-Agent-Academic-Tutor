@@ -70,3 +70,49 @@ def upload_file(
     # Fallback for offline development / mock environments
     logger.info("Supabase storage not connected; using generated mock storage URL for %s", filename)
     return f"https://mock-storage.supabase.co/{bucket}/{unique_filename}"
+
+
+def extract_storage_path(storage_url_or_path: str, bucket: str = BUCKET_NAME) -> str:
+    """
+    Extracts the relative bucket path/filename from a full Supabase storage URL or path.
+    """
+    if not storage_url_or_path:
+        return ""
+    clean = storage_url_or_path.strip().split("?")[0]
+    bucket_marker = f"/{bucket}/"
+    if bucket_marker in clean:
+        return clean.split(bucket_marker)[-1]
+    return clean.rstrip("/").split("/")[-1]
+
+
+def delete_storage_files(
+    paths_or_urls: list[str],
+    bucket: str = BUCKET_NAME
+) -> bool:
+    """
+    Deletes files from the Supabase Storage bucket.
+    Ensures deletions succeed, otherwise raises a descriptive error to abort cascading deletes.
+    """
+    if not paths_or_urls:
+        return True
+
+    paths = [extract_storage_path(p, bucket) for p in paths_or_urls if p]
+    paths = [p for p in paths if p]
+
+    if not paths:
+        return True
+
+    client = get_storage_client()
+    if client is not None:
+        try:
+            logger.info("Deleting %d file(s) from Supabase storage bucket '%s': %s", len(paths), bucket, paths)
+            response = client.storage.from_(bucket).remove(paths)
+            logger.info("Supabase storage deletion response: %s", response)
+            return True
+        except Exception as e:
+            logger.error("Error deleting files from Supabase storage: %s", str(e), exc_info=True)
+            raise RuntimeError(f"Failed to delete files from Supabase storage bucket: {str(e)}") from e
+
+    logger.info("Supabase storage not connected; simulated deletion of %d file(s): %s", len(paths), paths)
+    return True
+

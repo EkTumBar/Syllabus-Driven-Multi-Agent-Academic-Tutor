@@ -159,3 +159,67 @@ def test_admin_role_access(client):
 def test_unauthenticated_access_fails(client):
     resp = client.get("/auth/me")
     assert resp.status_code == 401
+
+
+def test_login_anti_enumeration_unregistered_email(client):
+    """
+    Anti-enumeration security test:
+    Verify that an unregistered email returns the exact same 401 status and generic
+    error detail as an invalid password for a registered email.
+    """
+    payload = {
+        "email": "completely_unregistered_user_999@example.com",
+        "password": "some_random_password_attempt"
+    }
+    response = client.post("/auth/login", json=payload)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Incorrect email or password"
+
+
+def test_login_anti_enumeration_invalid_password(client):
+    """
+    Anti-enumeration security test:
+    Verify that an invalid password for an existing account returns generic error.
+    """
+    payload = {
+        "email": "student1@example.com",
+        "password": "wrong_password_test"
+    }
+    response = client.post("/auth/login", json=payload)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Incorrect email or password"
+
+
+def test_blind_password_reset_flow(client):
+    """
+    Blind Password Reset Test (Anti-Enumeration):
+    Verify that submitting both registered and unregistered emails returns identical 200 OK
+    with the exact generic security message, while background tasks trigger appropriate emails.
+    """
+    from auth.auth_routes import _DISPATCHED_RESET_EMAILS
+    _DISPATCHED_RESET_EMAILS.clear()
+
+    # 1. Registered email
+    registered_payload = {"email": "student1@example.com"}
+    reg_response = client.post("/auth/forgot-password", json=registered_payload)
+    assert reg_response.status_code == 200
+    assert reg_response.json()["message"] == "If an account with that email exists, we have sent a password reset link."
+
+    # 2. Unregistered email
+    unregistered_payload = {"email": "nobody_exists_here@example.com"}
+    unreg_response = client.post("/auth/forgot-password", json=unregistered_payload)
+    assert unreg_response.status_code == 200
+    assert unreg_response.json()["message"] == "If an account with that email exists, we have sent a password reset link."
+
+    # 3. Verify dispatched email records in background
+    assert len(_DISPATCHED_RESET_EMAILS) == 2
+    reg_email = next(e for e in _DISPATCHED_RESET_EMAILS if e["to"] == "student1@example.com")
+    assert reg_email["account_exists"] is True
+    assert "reset-password?token=" in reg_email["link"]
+    assert "Password Reset Request" in reg_email["subject"]
+
+    unreg_email = next(e for e in _DISPATCHED_RESET_EMAILS if e["to"] == "nobody_exists_here@example.com")
+    assert unreg_email["account_exists"] is False
+    assert unreg_email["link"] == "/auth"
+    assert "no active account" in unreg_email["body"].lower() or "do not have an active account" in unreg_email["body"].lower()
+

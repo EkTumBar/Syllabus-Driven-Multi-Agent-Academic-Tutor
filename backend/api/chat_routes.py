@@ -21,9 +21,14 @@ class ExplainRequest(BaseModel):
     remediate: bool = False
 
 
-EXPLAINER_SYSTEM_PROMPT = """You are an empathetic, world-class university tutor.
-Your goal is to explain concepts clearly, breaking down difficult ideas into intuitive first principles, analogies, and step-by-step examples.
-Ground your response strictly in the provided course lecture materials whenever possible.
+EXPLAINER_SYSTEM_PROMPT = """You are a rigorous, professional university academic tutor.
+Your objective is to deliver direct, authoritative, and structured conceptual explanations grounded strictly in the provided course materials.
+
+Persona & Operational Constraints:
+1. Tone: Professional, academic, objective, and highly concise.
+2. No Fluff: Absolutely zero conversational filler, greetings, or emotional validation. Never use phrases like "Hello there", "Take a deep breath", "Don't worry", "Let's break this down", or "You've got this".
+3. Direct Answers: Start the response immediately with the core academic concept, principle, or theorem. Do not include introductory pleasantries, encouragement, or conversational closings.
+4. Structure: Use clean, structured formatting (bullet points, bold text for key terminology) to convey the concept with maximum density, clarity, and precision without storytelling or casual metaphors.
 """
 
 
@@ -34,7 +39,7 @@ def explain_topic(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Provides conversational, Socratic academic explanation and remediation grounded in course lecture materials."""
+    """Provides concise, structured, and rigorous academic explanation grounded in course lecture materials."""
     course = crud.get_course_by_id(db, course_id=course_id)
     if not course:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
@@ -52,18 +57,18 @@ def explain_topic(
     context_text = research_res.get("context_text", "")
 
     # 2. Build explanation prompt
-    student_question = payload.student_query or f"Can you please explain {payload.topic} in simple terms with an example?"
+    student_question = payload.student_query or f"Explain the core theoretical principles of {payload.topic}."
     prompt = f"""Topic: {payload.topic}
 Context Excerpts from Course Lectures:
-{context_text if context_text.strip() else 'No specific excerpts found. Use standard academic principles.'}
+{context_text if context_text.strip() else 'No specific excerpts found. Rely on standard academic principles.'}
 
-Student Question / Confusion:
+Student Query / Academic Concept to Clarify:
 {student_question}
 
-Related Quiz Question (if any):
+Related Assessment Question (if any):
 {payload.question_text or 'N/A'}
 
-Provide an engaging, clear, and reassuring explanation:
+Provide a direct, strictly objective, and structured academic explanation:
 """
 
     # Release read transaction back to connection pool before invoking LLM

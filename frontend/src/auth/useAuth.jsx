@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api/client';
+import { getUserRole, getRoleBadgeStyle, getRoleAccessLevel } from './roleUtils';
 
 const AuthContext = createContext(null);
 
@@ -65,19 +66,55 @@ export function AuthProvider({ children }) {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.clear();
+    if (typeof document !== 'undefined' && document.cookie) {
+      document.cookie.split(';').forEach((c) => {
+        document.cookie = c
+          .replace(/^ +/, '')
+          .replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+      });
+    }
     setUser(null);
     setToken(null);
   };
+
+  const updateUser = (updatedData) => {
+    setUser((prev) => {
+      const next = { ...prev, ...updatedData };
+      localStorage.setItem('user', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const forgotPassword = async (email) => {
+    const res = await api.post('/auth/forgot-password', { email });
+    return res.data;
+  };
+
+  const isAuthenticated = !!token && !!user;
+  const currentRole = getUserRole(user, isAuthenticated);
+  const isAdmin = currentRole === 'Admin';
+  const isStudent = currentRole === 'Student';
+  const isGuest = currentRole === 'Guest';
+  const accessLevel = getRoleAccessLevel(currentRole);
 
   const value = {
     user,
     token,
     isLoading,
-    isAuthenticated: !!token && !!user,
-    isAdmin: user?.role === 'admin',
+    loading: isLoading,
+    isAuthenticated,
+    role: currentRole,
+    roleBadge: currentRole,
+    isAdmin,
+    isStudent,
+    isGuest,
+    accessLevel,
     login,
     signup,
     logout,
+    updateUser,
+    forgotPassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -90,3 +127,5 @@ export function useAuth() {
   }
   return context;
 }
+
+export { getUserRole, getRoleBadgeStyle, getRoleAccessLevel };

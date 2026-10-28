@@ -12,7 +12,8 @@ from db.models import (
     Attempt,
     MasteryProfile,
     OrchestratorState,
-    AdminLog
+    AdminLog,
+    UserProgress
 )
 
 logger = logging.getLogger("crud")
@@ -29,8 +30,31 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
 
-def create_user(db: Session, email: str, hashed_password: str, role: str = "student") -> User:
-    user = User(email=email, hashed_password=hashed_password, role=role)
+def create_user(
+    db: Session,
+    email: str,
+    hashed_password: str,
+    role: str = "student",
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    username: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    location: Optional[str] = None,
+    avatar_url: Optional[str] = None,
+    preferences_json: Optional[Dict[str, Any]] = None,
+) -> User:
+    user = User(
+        email=email,
+        hashed_password=hashed_password,
+        role=role,
+        first_name=first_name,
+        last_name=last_name,
+        username=username,
+        phone_number=phone_number,
+        location=location,
+        avatar_url=avatar_url,
+        preferences_json=preferences_json,
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -50,6 +74,49 @@ def delete_user(db: Session, user_id: str) -> bool:
     return True
 
 
+def update_user_profile(
+    db: Session,
+    user_id: str,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    username: Optional[str] = None,
+    phone_number: Optional[str] = None,
+    location: Optional[str] = None,
+    avatar_url: Optional[str] = None,
+    preferences_json: Optional[Dict[str, Any]] = None
+) -> Optional[User]:
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return None
+    if first_name is not None:
+        user.first_name = first_name
+    if last_name is not None:
+        user.last_name = last_name
+    if username is not None:
+        user.username = username.strip() if username.strip() else None
+    if phone_number is not None:
+        user.phone_number = phone_number.strip() if phone_number.strip() else None
+    if location is not None:
+        user.location = location.strip() if location.strip() else None
+    if avatar_url is not None:
+        user.avatar_url = avatar_url
+    if preferences_json is not None:
+        user.preferences_json = preferences_json
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_user_password(db: Session, user_id: str, hashed_password: str) -> Optional[User]:
+    user = get_user_by_id(db, user_id)
+    if not user:
+        return None
+    user.hashed_password = hashed_password
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 # ---------------------------------------------------------
 # Course CRUD (Multi-tenant scoped by user_id)
 # ---------------------------------------------------------
@@ -61,8 +128,11 @@ def create_course(db: Session, user_id: str, title: str, syllabus_raw: str) -> C
     return course
 
 
-def get_courses_by_user(db: Session, user_id: str) -> List[Course]:
-    return db.query(Course).filter(Course.user_id == user_id).order_by(desc(Course.created_at)).all()
+def get_courses_by_user(db: Session, user_id: str, include_archived: bool = False) -> List[Course]:
+    query = db.query(Course).filter(Course.user_id == user_id)
+    if not include_archived:
+        query = query.filter(Course.is_archived.is_(False))
+    return query.order_by(desc(Course.created_at)).all()
 
 
 def get_course_by_id(db: Session, course_id: str, user_id: Optional[str] = None) -> Optional[Course]:
@@ -75,10 +145,21 @@ def get_course_by_id(db: Session, course_id: str, user_id: Optional[str] = None)
 get_course = get_course_by_id
 
 
+def archive_course(db: Session, course_id: str, is_archived: bool = True, user_id: Optional[str] = None) -> Optional[Course]:
+    """Sets the is_archived flag on a course (soft delete)."""
+    course = get_course_by_id(db, course_id, user_id=user_id)
+    if not course:
+        return None
+    course.is_archived = is_archived
+    db.commit()
+    db.refresh(course)
+    return course
+
+
 def delete_course(db: Session, course_id: str, user_id: Optional[str] = None) -> bool:
     """
     Deletes a course and cleanly deletes all child records in dependency order:
-    Attempts -> Questions -> MasteryProfile -> Modules -> OrchestratorState ->
+    UserProgress -> Attempts -> Questions -> MasteryProfile -> Modules -> OrchestratorState ->
     DocumentChunks -> Documents -> Course.
     """
     course = get_course_by_id(db, course_id, user_id=user_id)
@@ -87,6 +168,8 @@ def delete_course(db: Session, course_id: str, user_id: Optional[str] = None) ->
 
     try:
         # 1. Cleanly delete child records in reverse dependency order
+        db.query(UserProgress).filter(UserProgress.course_id == course_id).delete(synchronize_session=False)
+
         module_rows = db.query(Module.id).filter(Module.course_id == course_id).all()
         module_ids = [m[0] for m in module_rows]
 
@@ -119,6 +202,63 @@ def delete_course(db: Session, course_id: str, user_id: Optional[str] = None) ->
         logger.error("Explicit deletion failed for course %s: %s", course_id, str(e), exc_info=True)
         db.rollback()
         raise e
+
+
+# ---------------------------------------------------------
+# User Progress CRUD
+# ---------------------------------------------------------
+def get_user_progress(
+    db: Session,
+    user_id: str,
+    course_id: str,
+    module_id: Optional[str] = None
+) -> Optional[UserProgress]:
+    query = db.query(UserProgress).filter(
+        UserProgress.user_id == user_id,
+        UserProgress.course_id == course_id
+    )
+    if module_id:
+        query = query.filter(UserProgress.module_id == module_id)
+    else:
+        query = query.order_by(desc(UserProgress.updated_at))
+    return query.first()
+
+
+def upsert_user_progress(
+    db: Session,
+    user_id: str,
+    course_id: str,
+    current_question_index: int,
+    answers_submitted: Optional[List[Any]] = None,
+    module_id: Optional[str] = None
+) -> UserProgress:
+    query = db.query(UserProgress).filter(
+        UserProgress.user_id == user_id,
+        UserProgress.course_id == course_id
+    )
+    if module_id is not None:
+        query = query.filter(UserProgress.module_id == module_id)
+    else:
+        query = query.filter(UserProgress.module_id.is_(None))
+
+    progress = query.first()
+    if progress:
+        progress.current_question_index = max(0, current_question_index)
+        if answers_submitted is not None:
+            progress.answers_submitted = answers_submitted
+    else:
+        progress = UserProgress(
+            user_id=user_id,
+            course_id=course_id,
+            module_id=module_id,
+            current_question_index=max(0, current_question_index),
+            answers_submitted=answers_submitted or []
+        )
+        db.add(progress)
+
+    db.commit()
+    db.refresh(progress)
+    return progress
 
 
 

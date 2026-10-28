@@ -78,8 +78,23 @@
       ]
     }
     </script>
+
+    <!-- Immediate Theme Initialization (Prevents FOUC on First Paint) -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('syllabus_tutor_theme');
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = saved || 'dark'; // Default theme matches Mastery & Progress (#070b14)
+          if (theme === 'system') {
+            theme = prefersDark ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', theme);
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-slate-50 text-slate-900 antialiased min-h-screen">
+  <body class="antialiased min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

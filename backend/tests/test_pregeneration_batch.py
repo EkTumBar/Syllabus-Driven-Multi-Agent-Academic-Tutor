@@ -194,3 +194,63 @@ def test_quiz_progression_increments_index_and_total_count(db):
     assert p3["total_questions"] == 20
     assert "Question 3:" in p3["questions"][0]["question_text"]
 
+
+def test_ai_variability_and_difficulty_calibration(db):
+    """
+    Validates that generate_question_bank injects dynamic temperature,
+    entropy seed, and difficulty prompts for 'easy', 'medium', and 'hard' tiers.
+    """
+    user = User(id="user_var_test", email="var@univ.edu", hashed_password="pw", role="student")
+    course = Course(id="course_var_test", user_id=user.id, title="Algorithms", syllabus_raw="Graph algorithms")
+    mod = Module(id="mod_var_test", course_id=course.id, title="Graph Traversal", order_index=1)
+    db.add_all([user, course, mod])
+    db.commit()
+
+    captured_calls = []
+
+    def fake_generate(prompt, system, json_mode=True, temperature=0.3):
+        captured_calls.append({"prompt": prompt, "system": system, "temperature": temperature})
+        return json.dumps([
+            {
+                "question": f"Question stem for {prompt[:30]}",
+                "options": ["A. Choice 1", "B. Choice 2", "C. Choice 3", "D. Choice 4"],
+                "correct_answer": "A. Choice 1",
+                "difficulty": "hard",
+                "explanation": "Deep reasoning explanation"
+            }
+        ])
+
+    with patch("agents.examiner_agent.generate", side_effect=fake_generate):
+        # 1. Test Hard Tier with dynamic variability
+        qs_hard = generate_question_bank(
+            course_id=course.id,
+            module_id=mod.id,
+            topic=mod.title,
+            count=15,
+            difficulty="hard",
+            db=db
+        )
+        assert len(qs_hard) == 1
+        call_hard = captured_calls[-1]
+        assert "Competitive Exam level" in call_hard["prompt"]
+        assert "Entropy Randomization Token: seed-" in call_hard["prompt"]
+        assert "VARIABILITY & DIVERSITY MANDATE" in call_hard["prompt"]
+        assert 0.70 <= call_hard["temperature"] <= 0.90
+
+        # 2. Test Easy Tier
+        qs_easy = generate_question_bank(
+            course_id=course.id,
+            module_id=mod.id,
+            topic=mod.title,
+            count=10,
+            difficulty="easy",
+            db=db
+        )
+        assert len(qs_easy) == 1
+        call_easy = captured_calls[-1]
+        assert "High School level" in call_easy["prompt"]
+
+        # Verify distinct entropy seeds generated across calls
+        assert call_hard["prompt"] != call_easy["prompt"]
+
+

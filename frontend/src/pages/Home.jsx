@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { SyllabusUpload } from '../components/SyllabusUpload';
 import { 
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export const Home = () => {
+  const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
@@ -42,6 +43,9 @@ export const Home = () => {
   const handleCourseCreated = (newCourse) => {
     setCourses((prev) => [newCourse, ...prev]);
     setShowUpload(false);
+    if (newCourse?.id) {
+      navigate(`/course/${newCourse.id}`, { state: { course: newCourse } });
+    }
   };
 
   const handleDeleteCourse = async () => {
@@ -49,12 +53,13 @@ export const Home = () => {
     setIsDeleting(true);
     setDeleteError('');
     try {
-      await apiClient.delete(`/courses/${courseToDelete.id}`);
+      // Soft-delete: toggle is_archived to True to remove from main dashboard
+      await apiClient.patch(`/courses/${courseToDelete.id}/archive`, { is_archived: true });
       setCourses((prev) => prev.filter((c) => c.id !== courseToDelete.id));
       setCourseToDelete(null);
     } catch (err) {
-      console.error('Failed to delete course:', err);
-      setDeleteError(err.response?.data?.detail || 'Failed to delete course. Please try again.');
+      console.error('Failed to archive course:', err);
+      setDeleteError(err.response?.data?.detail || 'Failed to archive course. Please try again.');
     } finally {
       setIsDeleting(false);
     }
@@ -109,8 +114,8 @@ export const Home = () => {
       <div>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-black text-slate-900">Your Enrolled Courses</h2>
-            <p className="text-xs text-slate-600 mt-0.5">
+            <h2 className="text-xl font-black text-[var(--text-primary)]">Your Enrolled Courses</h2>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
               Select a course to start your adaptive quiz and concept explanation session
             </p>
           </div>
@@ -118,7 +123,7 @@ export const Home = () => {
           {!showUpload && courses.length > 0 && (
             <button
               onClick={() => setShowUpload(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200/60 transition"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100/80 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 transition"
             >
               <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               <span>New Course</span>
@@ -128,16 +133,16 @@ export const Home = () => {
 
         {loading ? (
           <div className="py-16 text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-3" aria-hidden="true" />
-            <p className="text-sm font-medium text-slate-600">Loading your courses...</p>
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-400 mx-auto mb-3" aria-hidden="true" />
+            <p className="text-sm font-medium text-[var(--text-secondary)]">Loading your courses...</p>
           </div>
         ) : courses.length === 0 ? (
-          <div className="bg-white rounded-3xl p-12 border border-slate-200/80 text-center shadow-xs">
-            <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mx-auto mb-4" aria-hidden="true">
+          <div className="bg-[var(--bg-card)] rounded-3xl p-12 border border-[var(--border)] text-center shadow-xs">
+            <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mx-auto mb-4" aria-hidden="true">
               <GraduationCap className="w-8 h-8" />
             </div>
-            <h3 className="text-base font-bold text-slate-900">No Courses Yet</h3>
-            <p className="text-xs text-slate-600 mt-1 max-w-sm mx-auto">
+            <h3 className="text-base font-bold text-[var(--text-primary)]">No Courses Yet</h3>
+            <p className="text-xs text-[var(--text-secondary)] mt-1 max-w-sm mx-auto">
               Get started by uploading your first course syllabus or pasting your lecture topics.
             </p>
             <button
@@ -157,11 +162,11 @@ export const Home = () => {
               return (
                 <div
                   key={course.id}
-                  className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs hover:shadow-md hover:border-indigo-200 transition-all flex flex-col justify-between group relative"
+                  className="bg-[var(--bg-card)] rounded-2xl p-6 border border-[var(--border)] shadow-xs hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500/40 transition-all flex flex-col justify-between group relative"
                 >
                   <div>
                     <div className="flex items-start justify-between mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 group-hover:scale-105 transition-transform" aria-hidden="true">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform" aria-hidden="true">
                         <BookOpen className="w-5 h-5" />
                       </div>
                       <button
@@ -174,28 +179,28 @@ export const Home = () => {
                         }}
                         title={`Delete course: ${course.title}`}
                         aria-label={`Delete course: ${course.title}`}
-                        className="opacity-70 group-hover:opacity-100 focus:opacity-100 p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all duration-150"
+                        className="opacity-70 group-hover:opacity-100 focus:opacity-100 p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-transparent hover:border-rose-100 dark:hover:border-rose-900/40 transition-all duration-150"
                       >
                         <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </button>
                     </div>
 
-                    <h3 className="text-base font-bold text-slate-900 group-hover:text-indigo-600 transition-colors line-clamp-2">
+                    <h3 className="text-base font-bold text-[var(--text-primary)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-2">
                       {course.title}
                     </h3>
 
-                    <p className="text-xs text-slate-600 mt-2 line-clamp-2 leading-relaxed">
+                    <p className="text-xs text-[var(--text-secondary)] mt-2 line-clamp-2 leading-relaxed">
                       {course.syllabus_raw}
                     </p>
 
-                    <div className="mt-4 flex items-center gap-3 text-xs text-slate-600 font-medium pt-3 border-t border-slate-100">
+                    <div className="mt-4 flex items-center gap-3 text-xs text-[var(--text-secondary)] font-medium pt-3 border-t border-[var(--border)]">
                       <span className="flex items-center gap-1">
-                        <Layers className="w-3.5 h-3.5 text-indigo-500" aria-hidden="true" />
+                        <Layers className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" aria-hidden="true" />
                         <span>{moduleCount} Modules</span>
                       </span>
                       <span aria-hidden="true">•</span>
                       <span className="flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5 text-purple-500" aria-hidden="true" />
+                        <FileText className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" aria-hidden="true" />
                         <span>{docCount} Documents</span>
                       </span>
                     </div>
@@ -203,8 +208,9 @@ export const Home = () => {
 
                   <Link
                     to={`/course/${course.id}`}
+                    state={{ course }}
                     aria-label={`Enter Course Workspace for ${course.title}`}
-                    className="mt-6 w-full py-2.5 px-4 rounded-xl font-bold text-xs text-center text-indigo-600 bg-indigo-50 hover:bg-indigo-600 hover:text-white border border-indigo-100 transition-all flex items-center justify-center gap-1.5"
+                    className="mt-6 w-full py-2.5 px-4 rounded-xl font-bold text-xs text-center text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-600 hover:text-white dark:hover:bg-indigo-600 dark:hover:text-white border border-indigo-100 dark:border-indigo-800/60 transition-all flex items-center justify-center gap-1.5"
                   >
                     <span>Enter Course Workspace</span>
                     <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
@@ -224,9 +230,9 @@ export const Home = () => {
           aria-labelledby="delete-course-title"
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
         >
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+          <div className="bg-[var(--bg-card)] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[var(--border)] space-y-4">
             <div className="flex items-center justify-between">
-              <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600" aria-hidden="true">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-100 dark:border-rose-900/60 flex items-center justify-center text-rose-600 dark:text-rose-400" aria-hidden="true">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <button
@@ -237,21 +243,21 @@ export const Home = () => {
                   setCourseToDelete(null);
                   setDeleteError('');
                 }}
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition"
+                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-card-hover)] transition"
               >
                 <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
             <div>
-              <h3 id="delete-course-title" className="text-lg font-black text-slate-900">Delete Course</h3>
-              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                Are you sure you want to permanently delete <strong className="text-slate-800 font-semibold">{courseToDelete.title}</strong>? All generated modules, quiz questions, attempts, and indexed lecture documents will be deleted. This action cannot be undone.
+              <h3 id="delete-course-title" className="text-lg font-black text-[var(--text-primary)]">Archive Course</h3>
+              <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
+                Remove <strong className="text-[var(--text-primary)] font-semibold">{courseToDelete.title}</strong> from your active dashboard. You can still access its full performance metrics, restore it, or permanently delete it anytime under <strong className="text-indigo-600 dark:text-indigo-400 font-semibold">Mastery & Progress</strong>.
               </p>
             </div>
 
             {deleteError && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 text-xs">
                 {deleteError}
               </div>
             )}
@@ -264,7 +270,7 @@ export const Home = () => {
                   setCourseToDelete(null);
                   setDeleteError('');
                 }}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-card-hover)] transition disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -272,10 +278,10 @@ export const Home = () => {
                 type="button"
                 disabled={isDeleting}
                 onClick={handleDeleteCourse}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                <span>{isDeleting ? 'Deleting...' : 'Delete Course'}</span>
+                <span>{isDeleting ? 'Archiving...' : 'Archive Course'}</span>
               </button>
             </div>
           </div>

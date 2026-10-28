@@ -2,15 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   Global Design System Tokens: Light & Dark Theme
+   ========================================================================== */
+
+:root {
+  /* Light Theme Tokens */
+  --bg-page: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --bg-navbar: rgba(255, 255, 255, 0.95);
+  --bg-footer: rgba(248, 250, 252, 0.95);
+  --bg-input: #ffffff;
+  --border: #e2e8f0;
+  --border-color: #e2e8f0;
+  --border-subtle: #f1f5f9;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  --accent-hover: #4338ca;
+  --code-bg: #f1f5f9;
+  --code-text: #0f172a;
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  /* Dark Theme Tokens (Mastery & Progress dark navy #070b14) */
+  --bg-page: #070b14;
+  --bg-card: #0d1424;
+  --bg-card-hover: #131c31;
+  --bg-navbar: rgba(9, 14, 26, 0.95);
+  --bg-footer: rgba(7, 11, 20, 0.95);
+  --bg-input: #0a101d;
+  --border: #1e2a44;
+  --border-color: #1e2a44;
+  --border-subtle: rgba(30, 42, 68, 0.6);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #6366f1;
+  --accent-soft: rgba(99, 102, 241, 0.15);
+  --accent-hover: #818cf8;
+  --code-bg: #0a101d;
+  --code-text: #e2e8f0;
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
+  background-color: var(--bg-page);
+  color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
     Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
 /* Accessibility: High-contrast focus rings for keyboard navigation */
 :focus-visible {
-  outline: 2px solid #4f46e5;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -22,4 +73,43 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Rendered AI Markdown, Tables, and Math readability */
+.ai-markdown {
+  color: var(--text-primary);
+}
+
+.ai-markdown code {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.375rem;
+  font-size: 0.85em;
+  border: 1px solid var(--border-color);
+}
+
+.ai-markdown pre {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border-color);
+  overflow-x: auto;
+}
+
+.ai-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ai-markdown th,
+.ai-markdown td {
+  border: 1px solid var(--border-color);
+  padding: 0.5rem 0.75rem;
+}
+
+.ai-markdown th {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
 }

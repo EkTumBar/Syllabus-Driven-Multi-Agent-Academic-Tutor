@@ -88,7 +88,8 @@ def test_full_api_flow_and_role_gating(client):
             {"title": "Module 1: Intro to Chemistry", "order_index": 1, "topics": ["Atoms", "Molecules"], "prerequisites": []}
         ]
     })
-    with patch("agents.planner_agent.generate", return_value=mock_plan_json):
+    with patch("agents.planner_agent.generate", return_value=mock_plan_json), \
+         patch("agents.examiner_agent.generate_question_bank", return_value=[]):
         course_resp = client.post(
             "/courses",
             headers=student_headers,
@@ -368,6 +369,64 @@ def test_create_course_with_doc_upload_without_manual_text(client):
         assert data["title"] == "CS301: Operating Systems"
         assert "Operating Systems" in data["syllabus_raw"]
         assert len(data["modules"]) == 1
+
+
+def test_create_course_with_pregenerated_question_count_and_difficulty(client):
+    """
+    Validates that creating a course with question_count and difficulty parameters
+    pre-generates assessments for all modules upfront, and GET /modules/{id}/questions works.
+    """
+    signup = client.post("/auth/signup", json={"email": "pregen_api@univ.edu", "password": "pass123password", "role": "student"})
+    assert signup.status_code == 201
+    headers = {"Authorization": f"Bearer {signup.json()['access_token']}"}
+
+    mock_plan = json.dumps({
+        "modules": [
+            {"title": "Module 1: Binary Search Trees", "order_index": 1, "topics": ["BST"], "prerequisites": []}
+        ]
+    })
+    mock_questions = json.dumps([
+        {
+            "question": "What is the worst-case search complexity in an unbalanced BST?",
+            "options": ["A. O(1)", "B. O(log n)", "C. O(n)", "D. O(n log n)"],
+            "correct_answer": "C. O(n)",
+            "difficulty": "hard",
+            "explanation": "When an unbalanced BST degenerates into a linear linked list, search is O(n)."
+        }
+    ])
+
+    with patch("agents.planner_agent.generate", return_value=mock_plan), \
+         patch("agents.examiner_agent.generate", return_value=mock_questions):
+        res = client.post(
+            "/courses",
+            headers=headers,
+            json={
+                "title": "CS201: Data Structures",
+                "syllabus_raw": "Module 1: Binary Search Trees",
+                "question_count": 12,
+                "difficulty": "hard"
+            }
+        )
+        assert res.status_code == 201
+        data = res.json()
+        assert data["title"] == "CS201: Data Structures"
+        assert len(data["modules"]) == 1
+        mod = data["modules"][0]
+        assert len(mod["questions"]) == 1
+        assert mod["questions"][0]["difficulty"] == "hard"
+        assert "unbalanced BST" in mod["questions"][0]["question_text"]
+
+        course_id = data["id"]
+        mod_id = mod["id"]
+
+        # Test GET /courses/{course_id}/modules/{module_id}/questions
+        qs_res = client.get(f"/courses/{course_id}/modules/{mod_id}/questions", headers=headers)
+        assert qs_res.status_code == 200
+        qs_data = qs_res.json()
+        assert len(qs_data) == 1
+        assert qs_data[0]["difficulty"] == "hard"
+        assert qs_data[0]["correct_answer"] == "C. O(n)"
+
 
 
 

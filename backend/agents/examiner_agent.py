@@ -171,18 +171,38 @@ def generate_question_bank(
     topic: str,
     context_text: str = "",
     count: int = 25,
+    difficulty: str = "medium",
     seed_offset: int = 0,
     existing_questions: Optional[List[str]] = None,
     db: Optional[Session] = None
 ) -> List[Dict[str, Any]]:
     """
-    Comprehensive Pre-Generated Question Bank Generator (NTA/JEE/NEET style).
-    Generates a full array of unique, difficulty-calibrated MCQs (configurable 20 to 50)
-    and saves them directly into the Supabase 'questions' table linked to module_id.
+    Comprehensive Pre-Generated Question Bank Generator (NTA/JEE/NEET/College/High-School style).
+    Generates a full array of unique, difficulty-calibrated MCQs (configurable 10 to 50)
+    with injected variability/entropy logic to ensure distinct questions even on identical syllabi,
+    and saves them directly into the database linked to module_id.
     """
+    import random
+    import time
+
     # Bound count between 5 and 50 (default 25)
     target_count = max(5, min(50, count))
-    seed_id = f"{uuid.uuid4().hex[:8]}-{seed_offset}"
+    
+    # Normalize difficulty tier
+    diff_lower = (difficulty or "medium").lower().strip()
+    if diff_lower not in ("easy", "medium", "hard"):
+        diff_lower = "medium"
+
+    # Difficulty calibration definitions
+    difficulty_instructions = {
+        "easy": "Target Difficulty: Easy (High School level). Focus on foundational definitions, basic formulas, clear terminology, and direct recall. Avoid multi-step traps or obscure exceptions.",
+        "medium": "Target Difficulty: Medium (College level). Focus on undergraduate-level conceptual understanding, scenario applications, standard problem-solving, and comparative analysis.",
+        "hard": "Target Difficulty: Hard (Competitive Exam level - NTA/JEE/GRE). Prompt deep reasoning, multi-step critical thinking, analytical synthesis, edge case evaluation, subtle distractor traps, and intricate problem scenarios."
+    }
+
+    # Generate unique entropy seed and dynamic high-variability temperature
+    entropy_seed = f"seed-{uuid.uuid4().hex[:12]}-{int(time.time() * 1000)}-{seed_offset}"
+    dynamic_temp = round(random.uniform(0.72, 0.88), 2)
 
     context_section = context_text.strip() if context_text and context_text.strip() else f"Standard academic curriculum for: {topic}"
 
@@ -197,19 +217,20 @@ def generate_question_bank(
 
     prompt = f"""Topic / Module: {topic}
 Question Bank Target Size: {target_count} unique MCQs
-Variation Seed: {seed_id}
+Difficulty Level: {diff_lower.upper()}
+{difficulty_instructions[diff_lower]}
+Entropy Randomization Token: {entropy_seed}
 {exclusion_prompt}
 Course Excerpts & Syllabus Context:
 {context_section[:5000]}
 
-Generate exactly {target_count} difficulty-calibrated, high-yield multiple choice questions.
-Ensure balanced distribution:
-- ~30% Easy (Direct recall, core formulas, definitions)
-- ~40% Medium (Application, conceptual problem-solving)
-- ~30% Hard (Multi-step reasoning, analytical synthesis)
+VARIABILITY & DIVERSITY MANDATE [Entropy Seed: {entropy_seed}]:
+Generate exactly {target_count} completely new, distinct, and creative multiple choice questions.
+Even if this syllabus topic was evaluated before, ensure every question stem, angle of inquiry, and distractor set is uniquely formulated with novel pedagogical perspectives. Never output identical or repeated questions.
+All questions must strictly calibrate to the '{diff_lower}' difficulty tier ({difficulty_instructions[diff_lower]}).
 
 Return STRICTLY a JSON array containing the {target_count} questions with:
-"question", "options" (A, B, C, D), "correct_answer", "difficulty", and a detailed "explanation".
+"question", "options" (A, B, C, D), "correct_answer", "difficulty" (set to "{diff_lower}"), and a detailed "explanation".
 """
 
     if db is not None:
@@ -225,7 +246,7 @@ Return STRICTLY a JSON array containing the {target_count} questions with:
             prompt=prompt,
             system=EXAMINER_SYSTEM_PROMPT,
             json_mode=True,
-            temperature=0.3
+            temperature=dynamic_temp
         )
     except Exception as e:
         llm_error = e
@@ -234,8 +255,8 @@ Return STRICTLY a JSON array containing the {target_count} questions with:
     questions = None
     if response_text:
         try:
-            questions = _parse_questions_from_response(response_text, topic=topic)
-            logger.info("Successfully generated %d question bank items for topic='%s'", len(questions), topic)
+            questions = _parse_questions_from_response(response_text, topic=topic, target_difficulty=diff_lower)
+            logger.info("Successfully generated %d question bank items for topic='%s' (difficulty=%s, temp=%.2f)", len(questions), topic, diff_lower, dynamic_temp)
         except Exception as parse_err:
             logger.error("Parsing question bank failed for topic='%s': %s", topic, str(parse_err))
 
@@ -259,7 +280,7 @@ Return STRICTLY a JSON array containing the {target_count} questions with:
                 question_text=q["question_text"],
                 options_json=q["options_json"],
                 correct_answer=q["correct_answer"],
-                difficulty=q.get("difficulty", "medium"),
+                difficulty=q.get("difficulty") or diff_lower,
                 explanation=q.get("explanation", ""),
                 order_index=start_order + idx + 1
             )

@@ -43,12 +43,16 @@ def test_alembic_upgrade_and_downgrade(setup_migration_db):
         "mastery_profile",
         "orchestrator_state",
         "admin_logs",
+        "user_progress",
         "alembic_version"
     }
 
     assert expected_tables.issubset(tables), f"Missing tables: {expected_tables - tables}"
 
-    # 3. Check indexes on courses (ownership index)
+    # 3. Check indexes and columns on courses
+    course_columns = {c["name"] for c in inspector.get_columns("courses")}
+    assert "is_archived" in course_columns
+
     course_indexes = {idx["name"] for idx in inspector.get_indexes("courses")}
     assert "ix_courses_user_id" in course_indexes or "ix_courses_user_id_created" in course_indexes
 

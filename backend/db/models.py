@@ -28,6 +28,13 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(50), default="student", nullable=False)  # 'student' | 'admin'
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    username = Column(String(100), nullable=True)
+    phone_number = Column(String(50), nullable=True)
+    location = Column(String(255), nullable=True)
+    avatar_url = Column(Text, nullable=True)
+    preferences_json = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Relationships
@@ -36,6 +43,7 @@ class User(Base):
     mastery_records = relationship("MasteryProfile", back_populates="user", cascade="all, delete-orphan")
     orchestrator_states = relationship("OrchestratorState", back_populates="user", cascade="all, delete-orphan")
     admin_logs = relationship("AdminLog", back_populates="admin", foreign_keys="[AdminLog.admin_id]")
+    progress_records = relationship("UserProgress", back_populates="user", cascade="all, delete-orphan")
 
 
 class Course(Base):
@@ -45,11 +53,13 @@ class Course(Base):
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     title = Column(String(255), nullable=False)
     syllabus_raw = Column(Text, nullable=False)
+    is_archived = Column(Boolean, default=False, server_default="false", nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     # Composite Indexes
     __table_args__ = (
         Index("ix_courses_user_id_created", "user_id", "created_at"),
+        Index("ix_courses_user_archived", "user_id", "is_archived"),
     )
 
     # Relationships
@@ -58,6 +68,7 @@ class Course(Base):
     documents = relationship("Document", back_populates="course", cascade="all, delete-orphan", passive_deletes=True)
     chunks = relationship("DocumentChunk", back_populates="course", cascade="all, delete-orphan", passive_deletes=True)
     orchestrator_state = relationship("OrchestratorState", back_populates="course", uselist=False, cascade="all, delete-orphan", passive_deletes=True)
+    user_progress_records = relationship("UserProgress", back_populates="course", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class Module(Base):
@@ -78,6 +89,7 @@ class Module(Base):
     course = relationship("Course", back_populates="modules")
     questions = relationship("Question", back_populates="module", cascade="all, delete-orphan", passive_deletes=True)
     mastery_records = relationship("MasteryProfile", back_populates="module", cascade="all, delete-orphan", passive_deletes=True)
+    user_progress_records = relationship("UserProgress", back_populates="module", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class Document(Base):
@@ -216,3 +228,26 @@ class AdminLog(Base):
 
     # Relationships
     admin = relationship("User", back_populates="admin_logs", foreign_keys=[admin_id])
+
+
+class UserProgress(Base):
+    __tablename__ = "user_progress"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    course_id = Column(String(36), ForeignKey("courses.id", ondelete="CASCADE"), index=True, nullable=False)
+    module_id = Column(String(36), ForeignKey("modules.id", ondelete="CASCADE"), index=True, nullable=True)
+    current_question_index = Column(Integer, default=0, nullable=False)
+    answers_submitted = Column(JSON, default=list, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    # Composite Indexes & Constraints
+    __table_args__ = (
+        Index("ix_user_progress_user_course_module", "user_id", "course_id", "module_id", unique=True),
+        Index("ix_user_progress_user_course", "user_id", "course_id"),
+    )
+
+    # Relationships
+    user = relationship("User", back_populates="progress_records")
+    course = relationship("Course", back_populates="user_progress_records")
+    module = relationship("Module", back_populates="user_progress_records")

@@ -38,9 +38,15 @@ def run_db_migrations():
         from sqlalchemy import inspect, text
         Base.metadata.create_all(bind=engine)
         
-        # Verify questions columns exist (handles existing databases without alembic sync)
+        # Verify questions and courses columns exist (handles existing databases without alembic sync)
         with engine.connect() as conn:
             inspector = inspect(conn)
+            if "courses" in inspector.get_table_names():
+                course_cols = [c["name"] for c in inspector.get_columns("courses")]
+                if "is_archived" not in course_cols:
+                    conn.execute(text("ALTER TABLE courses ADD COLUMN is_archived BOOLEAN DEFAULT FALSE NOT NULL;"))
+                    conn.commit()
+
             if "questions" in inspector.get_table_names():
                 cols = [c["name"] for c in inspector.get_columns("questions")]
                 if "explanation" not in cols:
@@ -49,6 +55,22 @@ def run_db_migrations():
                 if "order_index" not in cols:
                     conn.execute(text("ALTER TABLE questions ADD COLUMN order_index INTEGER DEFAULT 0 NOT NULL;"))
                     conn.commit()
+
+            if "users" in inspector.get_table_names():
+                user_cols = [c["name"] for c in inspector.get_columns("users")]
+                cols_to_add = [
+                    ("first_name", "VARCHAR(100)"),
+                    ("last_name", "VARCHAR(100)"),
+                    ("username", "VARCHAR(100)"),
+                    ("phone_number", "VARCHAR(50)"),
+                    ("location", "VARCHAR(255)"),
+                    ("avatar_url", "TEXT"),
+                    ("preferences_json", "JSON")
+                ]
+                for col_name, col_type in cols_to_add:
+                    if col_name not in user_cols:
+                        conn.execute(text(f"ALTER TABLE users ADD COLUMN {col_name} {col_type};"))
+                        conn.commit()
 
         logger.info("Database schema tables and columns verified successfully.")
     except Exception as e:

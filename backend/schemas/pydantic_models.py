@@ -9,6 +9,13 @@ from pydantic import BaseModel, EmailStr, ConfigDict, Field
 class UserBase(BaseModel):
     email: EmailStr
     role: str = "student"
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+    phone_number: Optional[str] = None
+    location: Optional[str] = None
+    avatar_url: Optional[str] = None
+    preferences_json: Optional[Dict[str, Any]] = None
 
 
 class UserCreate(BaseModel):
@@ -29,6 +36,51 @@ class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+    phone_number: Optional[str] = None
+    location: Optional[str] = None
+    avatar_url: Optional[str] = None
+    preferences_json: Optional[Dict[str, Any]] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+    otp: str
+
+
+class SendOtpRequest(BaseModel):
+    phone_number: Optional[str] = None
+
+
+class OtpResponse(BaseModel):
+    message: str
+    phone_masked: str
+    simulated_otp: Optional[str] = None
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str = "If an account with that email exists, we have sent a password reset link."
+    status: str = "success"
+
+
+class SessionItem(BaseModel):
+    id: str
+    device: str
+    ip: str
+    location: str
+    last_active: str
+    is_current: bool = False
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -39,6 +91,29 @@ class TokenPayload(BaseModel):
     sub: Optional[str] = None
     role: Optional[str] = None
     exp: Optional[int] = None
+
+
+# ---------------------------------------------------------
+# Question & Attempt Schemas
+# ---------------------------------------------------------
+class QuestionBase(BaseModel):
+    question_text: str
+    options_json: List[str]
+    correct_answer: str
+    difficulty: str = "medium"
+    explanation: Optional[str] = None
+    order_index: Optional[int] = 0
+
+
+class QuestionCreate(QuestionBase):
+    module_id: str
+
+
+class QuestionResponse(QuestionBase):
+    id: str
+    module_id: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------------------------------------------------
@@ -57,6 +132,7 @@ class ModuleCreate(ModuleBase):
 class ModuleResponse(ModuleBase):
     id: str
     course_id: str
+    questions: List[QuestionResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -90,12 +166,14 @@ class CourseBase(BaseModel):
 
 
 class CourseCreate(CourseBase):
-    pass
+    question_count: Optional[int] = 10
+    difficulty: Optional[str] = "medium"
 
 
 class CourseResponse(CourseBase):
     id: str
     user_id: str
+    is_archived: bool = False
     created_at: datetime
     modules: List[ModuleResponse] = []
     documents: List[DocumentResponse] = []
@@ -103,29 +181,31 @@ class CourseResponse(CourseBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ---------------------------------------------------------
-# Question & Attempt Schemas
-# ---------------------------------------------------------
-class QuestionBase(BaseModel):
-    question_text: str
-    options_json: List[str]
-    correct_answer: str
-    difficulty: str = "medium"
+class CourseArchiveUpdate(BaseModel):
+    is_archived: bool = True
 
 
-class QuestionCreate(QuestionBase):
-    module_id: str
+class UserProgressUpdate(BaseModel):
+    module_id: Optional[str] = None
+    current_question_index: int = 0
+    answers_submitted: Optional[List[Any]] = None
 
 
-class QuestionResponse(QuestionBase):
+class UserProgressResponse(BaseModel):
     id: str
-    module_id: str
+    user_id: str
+    course_id: str
+    module_id: Optional[str] = None
+    current_question_index: int = 0
+    answers_submitted: List[Any] = []
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AnswerSubmission(BaseModel):
     answer_given: str
+
 
 
 class AttemptResponse(BaseModel):

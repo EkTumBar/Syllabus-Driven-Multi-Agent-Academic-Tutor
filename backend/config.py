@@ -1,5 +1,15 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
+
+# Load environment files explicitly so os.getenv() has immediate access to keys
+for env_path in [BACKEND_DIR / ".env", PROJECT_ROOT / ".env"]:
+    if env_path.is_file():
+        load_dotenv(dotenv_path=env_path, override=False)
 
 
 class Settings(BaseSettings):
@@ -17,8 +27,8 @@ class Settings(BaseSettings):
     DB_POOL_TIMEOUT: int = int(os.getenv("DB_POOL_TIMEOUT", "15"))
     DB_POOL_RECYCLE: int = int(os.getenv("DB_POOL_RECYCLE", "300"))
 
-    # LLM Settings
-    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "30.0"))
+    # LLM Settings (increased to 180s for multi-module question bank generation)
+    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "180.0"))
 
     # Gemini
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -38,10 +48,11 @@ class Settings(BaseSettings):
     CORS_ORIGIN: str = os.getenv("CORS_ORIGIN", "http://localhost:5173")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[str(BACKEND_DIR / ".env"), str(PROJECT_ROOT / ".env")],
         env_file_encoding="utf-8",
         extra="ignore"
     )
 
 
 settings = Settings()
+
