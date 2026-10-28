@@ -1,5 +1,5 @@
 """Add is_archived to courses and create user_progress table
-Revision ID: 0004_soft_delete_and_user_progress
+Revision ID: 0004_course_lifecycle
 Revises: 0003_quiz_cbt_columns
 Create Date: 2026-10-28 15:45:00.000000
 
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "0004_soft_delete_and_user_progress"
+revision: str = "0004_course_lifecycle"
 down_revision: Union[str, None] = "0003_quiz_cbt_columns"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
