@@ -9,7 +9,7 @@ PROJECT_ROOT = BACKEND_DIR.parent
 # Load environment files explicitly so os.getenv() has immediate access to keys
 for env_path in [BACKEND_DIR / ".env", PROJECT_ROOT / ".env"]:
     if env_path.is_file():
-        load_dotenv(dotenv_path=env_path, override=False)
+        load_dotenv(dotenv_path=env_path, override=True)
 
 
 class Settings(BaseSettings):
