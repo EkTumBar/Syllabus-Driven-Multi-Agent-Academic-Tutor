@@ -18,14 +18,18 @@ export function AuthProvider({ children }) {
     const handleUnauthorized = () => {
       setUser(null);
       setToken(null);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
 
+    let unsub;
+
     // Check for active Supabase session (e.g. from Google OAuth redirect)
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session && !localStorage.getItem('token')) {
+        if (session) {
           const supabaseToken = session.access_token;
           const u = session.user;
           const fullName = u.user_metadata?.full_name || '';
@@ -42,8 +46,35 @@ export function AuthProvider({ children }) {
           localStorage.setItem('user', JSON.stringify(mapped));
           setToken(supabaseToken);
           setUser(mapped);
+          // Backend user will be auto-provisioned on first API call via
+          // the get_current_user dependency — no need to call /auth/me here.
+          setIsLoading(false);
+          return;
         }
-      }).catch((err) => console.warn('[Supabase session check]', err));
+
+        // No Supabase session — fall through to localStorage token check.
+        const savedToken = localStorage.getItem('token');
+        if (savedToken) {
+          api.get('/auth/me')
+            .then((res) => {
+              setUser(res.data);
+              localStorage.setItem('user', JSON.stringify(res.data));
+            })
+            .catch(() => {
+              // /auth/me rejected the stored token — clear everything.
+              setUser(null);
+              setToken(null);
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+            })
+            .finally(() => setIsLoading(false));
+        } else {
+          setIsLoading(false);
+        }
+      }).catch((err) => {
+        console.warn('[Supabase session check]', err);
+        setIsLoading(false);
+      });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_IN' && session) {
@@ -66,39 +97,42 @@ export function AuthProvider({ children }) {
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setToken(null);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+          // Keep localStorage in sync with the refreshed Supabase access token
+          localStorage.setItem('token', session.access_token);
+          setToken(session.access_token);
         }
       });
 
-      // Cleanup listener on unmount
-      var unsub = () => subscription?.unsubscribe();
-    }
-
-    // Verify existing token on mount
-    if (token) {
-      api.get('/auth/me')
-        .then((res) => {
-          setUser(res.data);
-          localStorage.setItem('user', JSON.stringify(res.data));
-        })
-        .catch(() => {
-          // If the token was a valid Supabase OAuth token, avoid clobbering user
-          if (!supabase) {
+      unsub = () => subscription?.unsubscribe();
+    } else {
+      // No Supabase client configured — pure backend JWT flow
+      const savedToken = localStorage.getItem('token');
+      if (savedToken) {
+        api.get('/auth/me')
+          .then((res) => {
+            setUser(res.data);
+            localStorage.setItem('user', JSON.stringify(res.data));
+          })
+          .catch(() => {
             setUser(null);
             setToken(null);
             localStorage.removeItem('token');
             localStorage.removeItem('user');
-          }
-        })
-        .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
+          })
+          .finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
+      }
     }
 
     return () => {
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
       if (unsub) unsub();
     };
-  }, [token]);
+  }, []);
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });

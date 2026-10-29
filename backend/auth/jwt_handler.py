@@ -4,6 +4,12 @@ import bcrypt
 from jose import jwt, JWTError
 from config import settings
 
+# Supabase always stamps user session JWTs with aud="authenticated".
+# python-jose raises JWTClaimsError (a JWTError subclass) when the token
+# carries an 'aud' claim but no audience is passed to jwt.decode().
+# We must tell jose what audience to expect for Supabase tokens.
+SUPABASE_AUDIENCE = "authenticated"
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies a plain text password against a bcrypt hashed password."""
@@ -36,9 +42,36 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 
 
 def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
-    """Decodes and validates a JWT access token."""
+    """Decodes and validates a JWT access token.
+
+    Handles two token issuers transparently:
+    - Supabase Auth tokens: always carry ``aud='authenticated'``; decoded
+      with ``audience=SUPABASE_AUDIENCE`` so python-jose does not raise
+      ``JWTClaimsError: Invalid audience``.
+    - Backend-issued tokens (login/signup): no ``aud`` claim; decoded without
+      an audience argument.
+
+    Returns the decoded payload dict on success, or ``None`` on any failure.
+    """
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        # First attempt: treat as a Supabase token (aud='authenticated')
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+            audience=SUPABASE_AUDIENCE,
+        )
+        return payload
+    except JWTError:
+        pass
+
+    try:
+        # Second attempt: treat as a backend-issued token (no aud claim)
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
         return payload
     except JWTError:
         return None

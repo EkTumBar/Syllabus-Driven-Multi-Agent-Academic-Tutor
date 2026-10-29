@@ -223,3 +223,34 @@ def test_blind_password_reset_flow(client):
     assert unreg_email["link"] == "/auth"
     assert "no active account" in unreg_email["body"].lower() or "do not have an active account" in unreg_email["body"].lower()
 
+
+def test_supabase_token_me_and_auto_provision(client):
+    """
+    Verify that a Supabase token carrying aud='authenticated' can access /auth/me
+    and auto-provisions a backend user row without 401.
+    """
+    from jose import jwt
+    import uuid
+    from config import settings
+
+    sub_id = str(uuid.uuid4())
+    email = f"oauth_user_{sub_id[:8]}@example.com"
+    token = jwt.encode(
+        {
+            "sub": sub_id,
+            "email": email,
+            "aud": "authenticated",
+            "user_metadata": {"full_name": "Supabase Test User"},
+            "exp": 2106353989,
+        },
+        settings.JWT_SECRET,
+        algorithm="HS256",
+    )
+
+    response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == email
+    assert data["first_name"] == "Supabase"
+
+
