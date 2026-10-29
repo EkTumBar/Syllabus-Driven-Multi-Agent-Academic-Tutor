@@ -254,3 +254,62 @@ def test_supabase_token_me_and_auto_provision(client):
     assert data["first_name"] == "Supabase"
 
 
+def test_supabase_es256_jwks_token_me(client):
+    """
+    Verify that an ES256 token verified via JWKS is accepted and auto-provisions user.
+    """
+    import jwt
+    import uuid
+    from unittest.mock import MagicMock
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from config import settings
+    from auth import jwt_handler
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_key = private_key.public_key()
+    sub_id = str(uuid.uuid4())
+    email = f"es256_user_{sub_id[:8]}@example.com"
+
+    supabase_url = (settings.SUPABASE_URL or "").rstrip("/")
+    token = jwt.encode(
+        {
+            "sub": sub_id,
+            "email": email,
+            "aud": "authenticated",
+            "iss": f"{supabase_url}/auth/v1",
+            "user_metadata": {"full_name": "ES256 Student"},
+            "exp": 2106353989,
+        },
+        private_key,
+        algorithm="ES256",
+        headers={"kid": "mock-es256-kid-1"},
+    )
+
+    mock_key = MagicMock()
+    mock_key.key = public_key
+    mock_client = MagicMock()
+    mock_client.get_signing_key_from_jwt.return_value = mock_key
+
+    orig_client = jwt_handler._jwks_client
+    jwt_handler._jwks_client = mock_client
+    try:
+        response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == email
+        assert data["first_name"] == "ES256"
+    finally:
+        jwt_handler._jwks_client = orig_client
+
+
+def test_supabase_es256_unknown_kid_401(client):
+    """
+    Verify that an ES256 token with an unknown kid returns a clean 401 Unauthorized.
+    """
+    token = "eyJhbGciOiJFUzI1NiIsImtpZCI6InVua25vd24ta2lkIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIn0.abc"
+    response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+    assert "Could not validate credentials" in response.json()["detail"]
+
+
+
