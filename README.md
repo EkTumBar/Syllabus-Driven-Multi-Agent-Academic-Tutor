@@ -1,6 +1,6 @@
 # Syllabus-Driven Multi-Agent Academic Tutor 🎓🤖
 
-An intelligent, multi-tenant academic tutoring web application powered by **Google Gemini 3.6**, **LangGraph**, **FastAPI**, **Postgres (with pgvector & Supabase Storage)**, and **React**.
+An intelligent, multi-tenant academic tutoring web application powered by **Google Gemini 3.5 Flash Lite**, **LangGraph**, **FastAPI**, **Postgres (with pgvector & Supabase Storage)**, and **React**.
 
 ---
 
@@ -21,7 +21,7 @@ graph TD
     end
 
     B --> Multi-AgentOrchestrator
-    Multi-AgentOrchestrator -->|Gemini 2.5 Flash & text-embedding-004| J[Google Gemini API]
+    Multi-AgentOrchestrator -->|Gemini 3.5 Flash Lite & text-embedding-004| J[Google Gemini API]
 ```
 
 ### The Four Collaborative AI Agents:
@@ -39,6 +39,7 @@ graph TD
 | :--- | :--- | :--- |
 | `DATABASE_URL` | Postgres connection string with async/sync driver | `postgresql://postgres.[ref]:[pwd]@aws-0-[region].pooler.supabase.com:6543/postgres` |
 | `GEMINI_API_KEY` | Google Gemini API Key | `AIzaSy...` |
+| `GEMINI_MODEL` | Target Gemini Model ID | `gemini-3.5-flash-lite` |
 | `JWT_SECRET` | Secret key for signing HS256 auth tokens | `generate-a-strong-random-hex-string` |
 | `SUPABASE_URL` | Supabase Project REST Endpoint URL | `https://[project-ref].supabase.co` |
 | `SUPABASE_KEY` | Supabase Service Role Key or Anon Key | `eyJhbGciOi...` |

@@ -44,7 +44,7 @@ def generate(
         prompt: User prompt content.
         system: Optional system instruction.
         json_mode: If True, enforces structured JSON output mime type.
-        model: Target Gemini model identifier (default: settings.GEMINI_MODEL or 'gemini-2.5-flash').
+        model: Target Gemini model identifier (default: settings.GEMINI_MODEL or 'gemini-3.5-flash-lite').
         temperature: Sampling temperature (default: 0.2 for deterministic academic evaluation).
         max_retries: Number of retry attempts on transient failures.
         files: Optional list of files (file objects, paths, (bytes, mime_type) tuples, or dicts).
@@ -52,7 +52,7 @@ def generate(
     Returns:
         Generated text response string.
     """
-    target_model = model or getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash")
+    target_model = model or getattr(settings, "GEMINI_MODEL", "gemini-3.5-flash-lite")
     client = get_genai_client()
 
     config = types.GenerateContentConfig(

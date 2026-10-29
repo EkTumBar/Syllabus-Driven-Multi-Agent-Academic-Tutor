@@ -35,7 +35,7 @@
 
 | Service Type | Tool | Why it's the best free choice |
 |---|---|---|
-| **LLM & Embeddings** | Google Gemini API | Google AI Studio offers a highly generous free tier for `gemini-2.5-flash` and `text-embedding-004`. |
+| **LLM & Embeddings** | Google Gemini API | Google AI Studio offers a highly generous free tier for `gemini-3.5-flash-lite` and `text-embedding-004`. |
 | **Database** | Supabase PostgreSQL | Hosted servers have ephemeral disks. Supabase provides a permanent free-tier database (unlike Render's 90-day limit). |
 | **Vector Store** | Supabase pgvector | `pgvector` comes pre-installed in Supabase, meaning you don't need to pay for Chroma Cloud. |
 | **File Storage** | Supabase Storage | Gives you 1GB of S3-compatible cloud storage free, without requiring an AWS account or credit card. |
@@ -75,7 +75,7 @@ def generate(prompt: str, system: str = None, json_mode: bool = False) -> str:
         temperature=0.2
     )
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.5-flash-lite",
         contents=prompt,
         config=config
     )

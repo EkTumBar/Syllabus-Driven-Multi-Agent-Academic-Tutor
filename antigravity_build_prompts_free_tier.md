@@ -166,7 +166,7 @@ TECH STACK: Python, google-genai SDK.
 
 REQUIREMENTS:
 1. A `generate(prompt: str, system: str = None, json_mode: bool = False)` 
-   function that calls `client.models.generate_content` (using `gemini-2.5-flash`).
+   function that calls `client.models.generate_content` (using `gemini-3.5-flash-lite`).
 2. Read `GEMINI_API_KEY` from `config.py`/env.
 3. Basic retry logic on transient errors.
 4. When `json_mode=True`, use `response_mime_type="application/json"` in the `GenerateContentConfig`.
