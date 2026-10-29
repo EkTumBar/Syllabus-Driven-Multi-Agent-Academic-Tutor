@@ -36,6 +36,7 @@ class Settings(BaseSettings):
 
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "default_dev_secret_key_change_me")
+    SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET") or os.getenv("JWT_SECRET", "default_dev_secret_key_change_me")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 

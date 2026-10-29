@@ -41,23 +41,16 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
     return encoded_jwt
 
 
-def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
-    """Decodes and validates a JWT access token.
+SUPABASE_JWT_SECRET = settings.SUPABASE_JWT_SECRET
 
-    Uses HS256 algorithm and options={"verify_aud": False} to accept
-    both Supabase Auth tokens (aud="authenticated") and backend-issued tokens.
-    Logs debug information on any failure so the exact cause appears in Render logs.
-    """
-    algorithm = settings.JWT_ALGORITHM or "HS256"
+
+def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """Decodes and validates a JWT access token."""
     try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET,
-            algorithms=[algorithm],
-            options={"verify_aud": False},
-        )
+        payload = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=["HS256"], audience="authenticated")
         return payload
     except Exception as e:
         print(f"JWT Decode Error: {e}")
         return None
+
 
