@@ -35,10 +35,12 @@ def get_current_user(
     )
     payload = decode_access_token(token)
     if payload is None:
+        print("JWT Decode Error: Token validation failed, rejected by decode_access_token")
         raise credentials_exception
 
     user_id: str = payload.get("sub")
     if user_id is None:
+        print(f"JWT Decode Error: Token payload missing 'sub' claim: {payload}")
         raise credentials_exception
 
     user = crud.get_user_by_id(db, user_id=user_id)

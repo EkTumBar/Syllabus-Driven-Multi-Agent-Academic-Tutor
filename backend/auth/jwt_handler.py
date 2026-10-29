@@ -44,34 +44,20 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta]
 def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     """Decodes and validates a JWT access token.
 
-    Handles two token issuers transparently:
-    - Supabase Auth tokens: always carry ``aud='authenticated'``; decoded
-      with ``audience=SUPABASE_AUDIENCE`` so python-jose does not raise
-      ``JWTClaimsError: Invalid audience``.
-    - Backend-issued tokens (login/signup): no ``aud`` claim; decoded without
-      an audience argument.
-
-    Returns the decoded payload dict on success, or ``None`` on any failure.
+    Uses HS256 algorithm and options={"verify_aud": False} to accept
+    both Supabase Auth tokens (aud="authenticated") and backend-issued tokens.
+    Logs debug information on any failure so the exact cause appears in Render logs.
     """
+    algorithm = settings.JWT_ALGORITHM or "HS256"
     try:
-        # First attempt: treat as a Supabase token (aud='authenticated')
         payload = jwt.decode(
             token,
             settings.JWT_SECRET,
-            algorithms=[settings.JWT_ALGORITHM],
-            audience=SUPABASE_AUDIENCE,
+            algorithms=[algorithm],
+            options={"verify_aud": False},
         )
         return payload
-    except JWTError:
-        pass
-
-    try:
-        # Second attempt: treat as a backend-issued token (no aud claim)
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET,
-            algorithms=[settings.JWT_ALGORITHM],
-        )
-        return payload
-    except JWTError:
+    except Exception as e:
+        print(f"JWT Decode Error: {e}")
         return None
+
