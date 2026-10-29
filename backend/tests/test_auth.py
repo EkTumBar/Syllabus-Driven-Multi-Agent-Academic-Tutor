@@ -229,7 +229,7 @@ def test_supabase_token_me_and_auto_provision(client):
     Verify that a Supabase token carrying aud='authenticated' can access /auth/me
     and auto-provisions a backend user row without 401.
     """
-    from jose import jwt
+    import jwt
     import uuid
     from config import settings
 

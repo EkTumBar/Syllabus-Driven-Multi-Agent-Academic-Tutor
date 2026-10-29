@@ -100,10 +100,7 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
             raise clean_401
 
         supabase_url = (settings.SUPABASE_URL or "").rstrip("/")
-        expected_issuers = [
-            f"{supabase_url}/auth/v1",
-            "supabase",
-        ]
+        expected_issuer = f"{supabase_url}/auth/v1"
 
         try:
             payload = jwt.decode(
@@ -111,7 +108,8 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
                 signing_key.key,
                 algorithms=["ES256"],
                 audience="authenticated",
-                issuer=expected_issuers,
+                issuer=expected_issuer,
+                leeway=10,
             )
             return payload
         except PyJWTError as e:
