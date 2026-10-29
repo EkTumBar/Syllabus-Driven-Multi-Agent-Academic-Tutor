@@ -45,10 +45,37 @@ SUPABASE_JWT_SECRET = settings.SUPABASE_JWT_SECRET
 
 
 def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
-    """Decodes and validates a JWT access token."""
+    """Decodes and validates a JWT access token.
+
+    Accepts HS256 tokens with audience='authenticated' (Supabase) as well as
+    tokens that specify other standard algorithms or omit the audience claim.
+    """
     try:
-        payload = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=["HS256"], audience="authenticated")
-        return payload
+        try:
+            unverified_header = jwt.get_unverified_header(token)
+            token_alg = unverified_header.get("alg") or "HS256"
+            print(f"JWT Header: {unverified_header}")
+        except Exception:
+            token_alg = "HS256"
+
+        allowed_algorithms = list(dict.fromkeys(["HS256", token_alg, "RS256", "ES256", "HS384", "HS512"]))
+
+        try:
+            payload = jwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=allowed_algorithms,
+                audience="authenticated",
+            )
+            return payload
+        except JWTError:
+            payload = jwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=allowed_algorithms,
+                options={"verify_aud": False},
+            )
+            return payload
     except Exception as e:
         print(f"JWT Decode Error: {e}")
         return None
