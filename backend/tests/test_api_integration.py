@@ -59,13 +59,25 @@ def test_full_api_flow_and_role_gating(client):
     student_token = student_signup.json()["access_token"]
     student_headers = {"Authorization": f"Bearer {student_token}"}
 
-    # 2. Register an admin user
-    admin_signup = client.post("/auth/signup", json={
+    # 2. Admins are promoted in the database (public signup can only create students)
+    from auth.jwt_handler import get_password_hash
+    from db import crud
+    _db = TestingSessionLocal()
+    try:
+        crud.create_user(
+            _db,
+            email="api_admin@univ.edu",
+            hashed_password=get_password_hash("adminpassword123"),
+            role="admin",
+        )
+    finally:
+        _db.close()
+    admin_signup = client.post("/auth/login", json={
         "email": "api_admin@univ.edu",
         "password": "adminpassword123",
-        "role": "admin"
     })
-    assert admin_signup.status_code == 201
+    assert admin_signup.status_code == 200
+    assert admin_signup.json()["user"]["role"] == "admin"
     admin_token = admin_signup.json()["access_token"]
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 

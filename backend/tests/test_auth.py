@@ -127,15 +127,54 @@ def test_auth_me_and_protected_routes(client):
     assert "Hello student1@example.com" in prot_resp.json()["message"]
 
 
+def _create_admin_in_db(email: str, password: str):
+    """Admins are promoted manually in the database, never via public signup."""
+    from auth.jwt_handler import get_password_hash
+    from db import crud
+    db = TestingSessionLocal()
+    try:
+        return crud.create_user(
+            db, email=email, hashed_password=get_password_hash(password), role="admin"
+        )
+    finally:
+        db.close()
+
+
+def test_signup_ignores_client_supplied_role(client):
+    """Privilege escalation guard: a client asking for admin/guest still gets student."""
+    for requested in ("admin", "administrator", "guest", "ADMIN", ""):
+        response = client.post("/auth/signup", json={
+            "email": f"escalate_{requested or 'blank'}@example.com",
+            "password": "strongpassword123",
+            "role": requested,
+        })
+        assert response.status_code == 201
+        assert response.json()["user"]["role"] == "student"
+
+        token = response.json()["access_token"]
+        denied = client.get("/api/test-admin-only", headers={"Authorization": f"Bearer {token}"})
+        assert denied.status_code == 403
+
+
+def test_signup_without_role_defaults_to_student(client):
+    response = client.post("/auth/signup", json={
+        "email": "norole@example.com",
+        "password": "strongpassword123",
+    })
+    assert response.status_code == 201
+    assert response.json()["user"]["role"] == "student"
+
+
 def test_admin_role_access(client):
-    # 1. Signup admin
-    admin_signup = client.post("/auth/signup", json={
+    # 1. Admin is promoted in the database, then logs in normally
+    _create_admin_in_db("admin@university.edu", "adminsecret123")
+    admin_login = client.post("/auth/login", json={
         "email": "admin@university.edu",
         "password": "adminsecret123",
-        "role": "admin"
     })
-    assert admin_signup.status_code == 201
-    admin_token = admin_signup.json()["access_token"]
+    assert admin_login.status_code == 200
+    assert admin_login.json()["user"]["role"] == "admin"
+    admin_token = admin_login.json()["access_token"]
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     # 2. Admin accesses admin route -> 200 OK
@@ -300,6 +339,50 @@ def test_supabase_es256_jwks_token_me(client):
         assert data["first_name"] == "ES256"
     finally:
         jwt_handler._jwks_client = orig_client
+
+
+def _supabase_style_token(sub_id, email, **extra_claims):
+    import jwt
+    from config import settings
+    claims = {
+        "sub": sub_id,
+        "email": email,
+        "aud": "authenticated",
+        "exp": 2106353989,
+    }
+    claims.update(extra_claims)
+    return jwt.encode(claims, settings.JWT_SECRET, algorithm="HS256")
+
+
+def test_supabase_token_cannot_self_assign_admin(client):
+    """role claim / user_metadata.role in a token must never grant admin."""
+    import uuid
+    sub_id = str(uuid.uuid4())
+    email = f"sneaky_{sub_id[:8]}@example.com"
+    token = _supabase_style_token(
+        sub_id,
+        email,
+        role="admin",
+        user_metadata={"role": "admin", "full_name": "Sneaky User"},
+        app_metadata={"role": "admin"},
+    )
+    response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()["role"] == "student"
+
+    denied = client.get("/api/test-admin-only", headers={"Authorization": f"Bearer {token}"})
+    assert denied.status_code == 403
+
+
+def test_supabase_token_cannot_take_over_admin_by_email(client):
+    """A Supabase token carrying an admin's email (different sub) must not resolve to the admin."""
+    import uuid
+    _create_admin_in_db("takeover_target@university.edu", "adminsecret123")
+    token = _supabase_style_token(str(uuid.uuid4()), "takeover_target@university.edu")
+    response = client.get("/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
+    denied = client.get("/api/test-admin-only", headers={"Authorization": f"Bearer {token}"})
+    assert denied.status_code == 403
 
 
 def test_supabase_es256_unknown_kid_401(client):

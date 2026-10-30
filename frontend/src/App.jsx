@@ -31,14 +31,16 @@ const AppLayout = () => {
   );
 };
 
-// Route component for /auth that redirects logged-in users to /
+// Route component for /auth that redirects logged-in users based ONLY on the
+// role the backend returned for them (never on anything chosen in the UI):
+// verified admins -> /admin, everyone else -> / (the student home).
 const PublicAuthRoute = () => {
-  const { isAuthenticated, isLoading, loading } = useAuth();
+  const { isAuthenticated, isAdmin, isLoading, loading } = useAuth();
   const checking = isLoading ?? loading;
 
   if (checking) return null;
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={isAdmin ? '/admin' : '/'} replace />;
   }
 
   return <AuthPage />;

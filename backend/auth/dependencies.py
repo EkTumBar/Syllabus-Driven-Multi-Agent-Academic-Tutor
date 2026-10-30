@@ -59,6 +59,19 @@ def get_current_user(
         # (e.g. created via /auth/signup before linking a Supabase account)
         existing_by_email = crud.get_user_by_email(db, email=email)
         if existing_by_email:
+            # Never let a Supabase token resolve to an admin account by email
+            # alone. Supabase sign-ups may be unconfirmed, so anyone could
+            # register an admin's email there. Admins must use the backend
+            # password login, whose token `sub` matches the user id.
+            if existing_by_email.role == "admin":
+                logger.warning(
+                    "Blocked Supabase token (sub=%s) from resolving to admin account by email",
+                    user_id,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Administrator accounts must sign in with email and password",
+                )
             # Return the existing user; the IDs won't match but the email does
             logger.info(
                 "Supabase token sub=%s matched existing backend user by email: %s",
@@ -69,10 +82,9 @@ def get_current_user(
         # Derive display name from Supabase user_metadata if available
         full_name: str = payload.get("user_metadata", {}).get("full_name", "") if isinstance(payload.get("user_metadata"), dict) else ""
         name_parts = full_name.split(" ") if full_name else []
-        role = payload.get("role") or "student"
-        # Supabase role claim on user tokens is always 'authenticated', not app roles
-        if role == "authenticated":
-            role = "student"
+        # Auto-provisioned users are ALWAYS students. Nothing in the token
+        # (role claim, user_metadata) may grant elevated privileges.
+        role = "student"
 
         logger.info(
             "Auto-provisioning backend user for Supabase sub=%s email=%s",

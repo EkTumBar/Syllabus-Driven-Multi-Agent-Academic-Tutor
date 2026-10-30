@@ -19,9 +19,14 @@ class UserBase(BaseModel):
 
 
 class UserCreate(BaseModel):
+    """Public self-registration payload.
+
+    There is intentionally NO ``role`` field: public signups are always
+    ``student``. Any ``role`` a client sends is ignored (pydantic drops unknown
+    fields). Admins are promoted manually in the database.
+    """
     email: EmailStr
     password: str = Field(..., min_length=6)
-    role: Optional[str] = "student"
 
 
 class UserLogin(BaseModel):

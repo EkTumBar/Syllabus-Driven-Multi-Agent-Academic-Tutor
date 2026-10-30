@@ -243,33 +243,55 @@ def test_role_and_access_levels(client):
     admin_probe = client.get("/admin/users", headers=student_headers)
     assert admin_probe.status_code == 403
 
-    # 3. Admin registration returns role 'admin'
-    admin_res = client.post("/auth/signup", json={
-        "email": "admin.role@example.com",
+    # 3. Requesting 'admin' at signup is ignored: the account is still a student
+    admin_attempt = client.post("/auth/signup", json={
+        "email": "admin.attempt@example.com",
         "password": "Password123!",
         "role": "admin"
     })
-    assert admin_res.status_code == 201
-    assert admin_res.json()["user"]["role"] == "admin"
-    admin_token = admin_res.json()["access_token"]
-    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+    assert admin_attempt.status_code == 201
+    assert admin_attempt.json()["user"]["role"] == "student"
+    attempt_headers = {"Authorization": f"Bearer {admin_attempt.json()['access_token']}"}
+    assert client.get("/admin/users", headers=attempt_headers).status_code == 403
 
-    # Admin can access admin endpoints
+    # 4. A real admin (promoted in the database) can use admin endpoints
+    db = TestingSessionLocal()
+    try:
+        crud.create_user(
+            db,
+            email="admin.role@example.com",
+            hashed_password=get_password_hash("Password123!"),
+            role="admin",
+        )
+    finally:
+        db.close()
+    admin_res = client.post("/auth/login", json={
+        "email": "admin.role@example.com",
+        "password": "Password123!"
+    })
+    assert admin_res.status_code == 200
+    assert admin_res.json()["user"]["role"] == "admin"
+    admin_headers = {"Authorization": f"Bearer {admin_res.json()['access_token']}"}
+
     admin_ok = client.get("/admin/users", headers=admin_headers)
     assert admin_ok.status_code == 200
 
-    # 4. Guest account registration returns role 'guest'
+    # 5. Overview endpoint: admin only
+    overview = client.get("/admin/overview", headers=admin_headers)
+    assert overview.status_code == 200
+    body = overview.json()
+    assert body["total_admins"] >= 1
+    assert body["total_students"] >= 2
+    assert "active_users_24h" in body
+    assert client.get("/admin/overview", headers=student_headers).status_code == 403
+    assert client.get("/admin/overview").status_code == 401
+
+    # 6. Requesting 'guest' at signup is ignored too
     guest_res = client.post("/auth/signup", json={
         "email": "guest.role@example.com",
         "password": "Password123!",
         "role": "guest"
     })
     assert guest_res.status_code == 201
-    assert guest_res.json()["user"]["role"] == "guest"
-    guest_token = guest_res.json()["access_token"]
-    guest_headers = {"Authorization": f"Bearer {guest_token}"}
-
-    # Guest cannot access admin endpoints
-    guest_admin_probe = client.get("/admin/users", headers=guest_headers)
-    assert guest_admin_probe.status_code == 403
+    assert guest_res.json()["user"]["role"] == "student"
 

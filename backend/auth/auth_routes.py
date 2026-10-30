@@ -89,7 +89,11 @@ def _send_blind_password_reset_email(email: str, exists: bool):
 
 @router.post("/signup", response_model=Token, status_code=status.HTTP_201_CREATED)
 def signup(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Registers a new user (student or admin) and returns a JWT access token."""
+    """Registers a new STUDENT and returns a JWT access token.
+
+    The role is decided here on the server and never taken from the request.
+    Admin accounts are promoted manually in the database (see README).
+    """
     existing_user = crud.get_user_by_email(db, email=user_data.email)
     if existing_user:
         raise HTTPException(
@@ -97,8 +101,7 @@ def signup(user_data: UserCreate, db: Session = Depends(get_db)):
             detail="An account with this email already exists"
         )
 
-    # Normalize role: support student, admin, and guest roles
-    role = user_data.role if user_data.role in ["student", "admin", "guest"] else "student"
+    role = "student"
     hashed_pwd = get_password_hash(user_data.password)
     user = crud.create_user(
         db,

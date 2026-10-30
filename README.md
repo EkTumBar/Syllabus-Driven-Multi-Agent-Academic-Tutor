@@ -101,7 +101,7 @@ Follow these steps to deploy the application to production on free-tier infrastr
 
 ## 🔑 Manual DB Admin Promotion Step
 
-By default, any new user signing up through the UI receives the `student` role. To promote an account to platform `admin`:
+Every public signup (UI, `POST /auth/signup`, or Google/Facebook SSO) is created as `student`. The server ignores any `role` sent by a client, and no screen lets a user pick one. Admin is granted only by the manual database step below. To promote an account to platform `admin`:
 
 1. Sign up a new user account through the application UI or via `POST /auth/signup`.
 2. Open the **Supabase SQL Editor** (or connect via `psql`) and run:

@@ -4,8 +4,6 @@ import {
   GraduationCap,
   Lock,
   Mail,
-  UserCheck,
-  ShieldCheck,
   ArrowRight,
   ArrowLeft,
   Loader2,
@@ -26,7 +24,6 @@ export function AuthPage({ onAuthSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState('student');
   const [rememberMe, setRememberMe] = useState(false);
 
   // Status and feedback states
@@ -128,7 +125,8 @@ export function AuthPage({ onAuthSuccess }) {
           localStorage.removeItem('syllabus_remembered_email');
         }
       } else {
-        await signup(trimmedEmail, password, role);
+        // Role is NOT chosen by the user. The backend always creates students.
+        await signup(trimmedEmail, password);
       }
 
       if (onAuthSuccess) {
@@ -542,54 +540,6 @@ export function AuthPage({ onAuthSuccess }) {
                       Forgot Password?
                     </button>
                   </div>
-                )}
-
-                {/* Role Selection on Signup */}
-                {!isLogin && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="pt-1"
-                  >
-                    <span className="block text-xs font-medium text-[var(--text-primary)] mb-2">
-                      Account Role
-                    </span>
-                    <div
-                      className="grid grid-cols-2 gap-3"
-                      role="radiogroup"
-                      aria-label="Account Role"
-                    >
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={role === 'student'}
-                        onClick={() => setRole('student')}
-                        className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-xs font-medium cursor-pointer ${
-                          role === 'student'
-                            ? 'border-sky-500 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300'
-                            : 'border-[var(--border)] bg-[var(--bg-card-hover)] text-[var(--text-secondary)] hover:border-indigo-500/30'
-                        }`}
-                      >
-                        <UserCheck className="w-4 h-4" aria-hidden="true" />
-                        <span>Student</span>
-                      </button>
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={role === 'admin'}
-                        onClick={() => setRole('admin')}
-                        className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-xs font-medium cursor-pointer ${
-                          role === 'admin'
-                            ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
-                            : 'border-[var(--border)] bg-[var(--bg-card-hover)] text-[var(--text-secondary)] hover:border-indigo-500/30'
-                        }`}
-                      >
-                        <ShieldCheck className="w-4 h-4" aria-hidden="true" />
-                        <span>Admin</span>
-                      </button>
-                    </div>
-                  </motion.div>
                 )}
 
                 {/* Primary Action Button */}

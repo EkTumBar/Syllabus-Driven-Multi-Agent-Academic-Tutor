@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import api from '../api/client';
 import { getUserRole, getRoleBadgeStyle, getRoleAccessLevel } from './roleUtils';
 
@@ -55,12 +55,18 @@ export function AuthProvider({ children }) {
   });
   const [token, setToken] = useState(() => localStorage.getItem('token') || null);
   const [isLoading, setIsLoading] = useState(true);
+  // True only once the profile (including role) has been confirmed by the
+  // backend in this page load. A role cached in localStorage is never trusted.
+  const [profileVerified, setProfileVerified] = useState(false);
+  const verifiedTokenRef = useRef(null);
 
   useEffect(() => {
     const handleUnauthorized = () => {
       clearStoredAuthData();
       setUser(null);
       setToken(null);
+      setProfileVerified(false);
+      verifiedTokenRef.current = null;
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
@@ -68,54 +74,71 @@ export function AuthProvider({ children }) {
     let isMounted = true;
     let unsub;
 
+    // The backend is the single source of truth for the user's profile/role.
+    // Supabase `user_metadata` is editable by the user, so it is never used for roles.
+    const applySupabaseSession = async (session) => {
+      const supabaseToken = session.access_token;
+      if (verifiedTokenRef.current === supabaseToken) return;
+
+      localStorage.setItem('token', supabaseToken);
+      setToken(supabaseToken);
+      try {
+        const res = await api.get('/auth/me', {
+          headers: { Authorization: `Bearer ${supabaseToken}` },
+        });
+        if (!isMounted) return;
+        localStorage.setItem('user', JSON.stringify(res.data));
+        setUser(res.data);
+        setProfileVerified(true);
+        verifiedTokenRef.current = supabaseToken;
+      } catch (err) {
+        console.warn('[Auth] Backend rejected the Supabase session:', err?.response?.status || err?.message);
+        if (!isMounted) return;
+        verifiedTokenRef.current = null;
+        setProfileVerified(false);
+        await performLogout(supabase, setUser, setToken);
+      }
+    };
+
+    // Validate a backend-issued token that is already in localStorage.
+    const verifyStoredToken = () => {
+      api.get('/auth/me')
+        .then((res) => {
+          if (isMounted && localStorage.getItem('token')) {
+            setUser(res.data);
+            localStorage.setItem('user', JSON.stringify(res.data));
+            setProfileVerified(true);
+          }
+        })
+        .catch(() => {
+          // /auth/me rejected the stored token — clear everything.
+          if (isMounted) {
+            clearStoredAuthData();
+            setUser(null);
+            setToken(null);
+            setProfileVerified(false);
+          }
+        })
+        .finally(() => {
+          if (isMounted) setIsLoading(false);
+        });
+    };
+
     // Check for active Supabase session (e.g. from Google OAuth redirect)
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!isMounted) return;
         if (session) {
-          const supabaseToken = session.access_token;
-          const u = session.user;
-          const fullName = u.user_metadata?.full_name || '';
-          const nameParts = fullName.split(' ');
-          const mapped = {
-            id: u.id,
-            email: u.email,
-            role: u.user_metadata?.role || 'student',
-            first_name: u.user_metadata?.first_name || nameParts[0] || '',
-            last_name: u.user_metadata?.last_name || nameParts.slice(1).join(' ') || '',
-            avatar_url: u.user_metadata?.avatar_url || '',
-          };
-          localStorage.setItem('token', supabaseToken);
-          localStorage.setItem('user', JSON.stringify(mapped));
-          setToken(supabaseToken);
-          setUser(mapped);
-          // Backend user will be auto-provisioned on first API call via
-          // the get_current_user dependency — no need to call /auth/me here.
-          setIsLoading(false);
+          applySupabaseSession(session).finally(() => {
+            if (isMounted) setIsLoading(false);
+          });
           return;
         }
 
         // No Supabase session — fall through to localStorage token check.
         const savedToken = localStorage.getItem('token');
         if (savedToken) {
-          api.get('/auth/me')
-            .then((res) => {
-              if (isMounted && localStorage.getItem('token')) {
-                setUser(res.data);
-                localStorage.setItem('user', JSON.stringify(res.data));
-              }
-            })
-            .catch(() => {
-              // /auth/me rejected the stored token — clear everything.
-              if (isMounted) {
-                clearStoredAuthData();
-                setUser(null);
-                setToken(null);
-              }
-            })
-            .finally(() => {
-              if (isMounted) setIsLoading(false);
-            });
+          verifyStoredToken();
         } else {
           setIsLoading(false);
         }
@@ -127,30 +150,21 @@ export function AuthProvider({ children }) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (!isMounted) return;
         if (event === 'SIGNED_IN' && session) {
-          const supabaseToken = session.access_token;
-          const u = session.user;
-          const fullName = u.user_metadata?.full_name || '';
-          const nameParts = fullName.split(' ');
-          const mapped = {
-            id: u.id,
-            email: u.email,
-            role: u.user_metadata?.role || 'student',
-            first_name: u.user_metadata?.first_name || nameParts[0] || '',
-            last_name: u.user_metadata?.last_name || nameParts.slice(1).join(' ') || '',
-            avatar_url: u.user_metadata?.avatar_url || '',
-          };
-          localStorage.setItem('token', supabaseToken);
-          localStorage.setItem('user', JSON.stringify(mapped));
-          setToken(supabaseToken);
-          setUser(mapped);
+          // Defer: awaiting other Supabase/API calls inside this callback can deadlock the client.
+          setTimeout(() => {
+            if (isMounted) applySupabaseSession(session);
+          }, 0);
         } else if (event === 'SIGNED_OUT') {
           clearStoredAuthData();
           setUser(null);
           setToken(null);
+          setProfileVerified(false);
+          verifiedTokenRef.current = null;
         } else if (event === 'TOKEN_REFRESHED' && session) {
           // Keep localStorage in sync with the refreshed Supabase access token
           localStorage.setItem('token', session.access_token);
           setToken(session.access_token);
+          if (verifiedTokenRef.current) verifiedTokenRef.current = session.access_token;
         }
       });
 
@@ -159,23 +173,7 @@ export function AuthProvider({ children }) {
       // No Supabase client configured — pure backend JWT flow
       const savedToken = localStorage.getItem('token');
       if (savedToken) {
-        api.get('/auth/me')
-          .then((res) => {
-            if (isMounted && localStorage.getItem('token')) {
-              setUser(res.data);
-              localStorage.setItem('user', JSON.stringify(res.data));
-            }
-          })
-          .catch(() => {
-            if (isMounted) {
-              clearStoredAuthData();
-              setUser(null);
-              setToken(null);
-            }
-          })
-          .finally(() => {
-            if (isMounted) setIsLoading(false);
-          });
+        verifyStoredToken();
       } else {
         setIsLoading(false);
       }
@@ -195,26 +193,36 @@ export function AuthProvider({ children }) {
     localStorage.setItem('user', JSON.stringify(userData));
     setToken(access_token);
     setUser(userData);
+    // `userData` came straight from the backend response, so it is authoritative.
+    setProfileVerified(true);
     return userData;
   };
 
-  const signup = async (email, password, role = 'student') => {
-    const res = await api.post('/auth/signup', { email, password, role });
+  const signup = async (email, password) => {
+    // Public signups are always students. The backend enforces this and assigns the role.
+    const res = await api.post('/auth/signup', { email, password });
     const { access_token, user: userData } = res.data;
     localStorage.setItem('token', access_token);
     localStorage.setItem('user', JSON.stringify(userData));
     setToken(access_token);
     setUser(userData);
+    setProfileVerified(true);
     return userData;
   };
 
   const logout = async () => {
+    verifiedTokenRef.current = null;
+    setProfileVerified(false);
     await performLogout(supabase, setUser, setToken);
   };
 
   const updateUser = (updatedData) => {
     setUser((prev) => {
-      const next = { ...prev, ...updatedData };
+      // The role can only come from the backend; never merge it from UI-supplied data.
+      const safeData = { ...(updatedData || {}) };
+      delete safeData.role;
+      delete safeData.is_admin;
+      const next = { ...prev, ...safeData };
       localStorage.setItem('user', JSON.stringify(next));
       return next;
     });
@@ -226,7 +234,10 @@ export function AuthProvider({ children }) {
   };
 
   const isAuthenticated = !!token && !!user;
-  const currentRole = getUserRole(user, isAuthenticated);
+  const resolvedRole = getUserRole(user, isAuthenticated);
+  // Until the backend has confirmed the profile, a cached "Admin" is treated as a plain
+  // Student, so editing localStorage can never unlock admin UI.
+  const currentRole = !profileVerified && resolvedRole === 'Admin' ? 'Student' : resolvedRole;
   const isAdmin = currentRole === 'Admin';
   const isStudent = currentRole === 'Student';
   const isGuest = currentRole === 'Guest';
@@ -238,6 +249,7 @@ export function AuthProvider({ children }) {
     isLoading,
     loading: isLoading,
     isAuthenticated,
+    profileVerified,
     role: currentRole,
     roleBadge: currentRole,
     isAdmin,

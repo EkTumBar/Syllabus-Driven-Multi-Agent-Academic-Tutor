@@ -1,15 +1,54 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db import crud
-from db.models import User
+from db.models import User, Course, Document, Attempt
 from auth.dependencies import require_admin
 from schemas.pydantic_models import UserResponse, AdminLogResponse
 
 logger = logging.getLogger("admin_routes")
 router = APIRouter(prefix="/admin", tags=["Administrator Dashboard"])
+
+
+@router.get("/overview")
+def get_platform_overview_admin(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Aggregate platform counters for the admin Overview screen (read-only, no PII)."""
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+    week_ago = now - timedelta(days=7)
+
+    total_students = db.query(func.count(User.id)).filter(User.role == "student").scalar() or 0
+    total_admins = db.query(func.count(User.id)).filter(User.role == "admin").scalar() or 0
+    new_signups_7d = db.query(func.count(User.id)).filter(User.created_at >= week_ago).scalar() or 0
+    total_courses = db.query(func.count(Course.id)).scalar() or 0
+    total_documents = db.query(func.count(Document.id)).scalar() or 0
+    attempts_24h = db.query(func.count(Attempt.id)).filter(Attempt.timestamp >= day_ago).scalar() or 0
+    # "Daily active users" = distinct students who answered at least one question in 24h
+    active_users_24h = (
+        db.query(func.count(func.distinct(Attempt.user_id)))
+        .filter(Attempt.timestamp >= day_ago)
+        .scalar()
+        or 0
+    )
+
+    return {
+        "total_students": total_students,
+        "total_admins": total_admins,
+        "new_signups_7d": new_signups_7d,
+        "active_users_24h": active_users_24h,
+        "attempts_24h": attempts_24h,
+        "total_courses": total_courses,
+        "total_documents": total_documents,
+        "database": "ok",  # the queries above succeeded
+        "generated_at": now.isoformat(),
+    }
 
 
 @router.get("/users", response_model=List[UserResponse])
