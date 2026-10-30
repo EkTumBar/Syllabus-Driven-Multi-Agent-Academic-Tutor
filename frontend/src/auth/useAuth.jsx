@@ -4,6 +4,48 @@ import { getUserRole, getRoleBadgeStyle, getRoleAccessLevel } from './roleUtils'
 
 import { supabase } from '../supabaseClient';
 
+const clearStoredAuthData = () => {
+  try {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('sb-')) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch (err) {
+    console.warn('[LocalStorage clear error]', err);
+  }
+  try {
+    sessionStorage.clear();
+  } catch (err) {
+    console.warn('[SessionStorage clear error]', err);
+  }
+  if (typeof document !== 'undefined' && document.cookie) {
+    document.cookie.split(';').forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, '')
+        .replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+    });
+  }
+};
+
+async function performLogout(supabaseClient, setUser, setToken) {
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient.auth.signOut({ scope: 'local' });
+      if (error) {
+        console.error('[Supabase signOut error]', error);
+      }
+    } catch (err) {
+      console.error('[Supabase signOut exception]', err);
+    }
+  }
+  clearStoredAuthData();
+  if (typeof setUser === 'function') setUser(null);
+  if (typeof setToken === 'function') setToken(null);
+}
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
@@ -15,28 +57,6 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const clearStoredAuthData = () => {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      try {
-        Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith('sb-')) {
-            localStorage.removeItem(key);
-          }
-        });
-      } catch (err) {
-        console.warn('[LocalStorage clear error]', err);
-      }
-      sessionStorage.clear();
-      if (typeof document !== 'undefined' && document.cookie) {
-        document.cookie.split(';').forEach((c) => {
-          document.cookie = c
-            .replace(/^ +/, '')
-            .replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
-        });
-      }
-    };
-
     const handleUnauthorized = () => {
       clearStoredAuthData();
       setUser(null);
@@ -45,11 +65,13 @@ export function AuthProvider({ children }) {
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
 
+    let isMounted = true;
     let unsub;
 
     // Check for active Supabase session (e.g. from Google OAuth redirect)
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!isMounted) return;
         if (session) {
           const supabaseToken = session.access_token;
           const u = session.user;
@@ -78,25 +100,32 @@ export function AuthProvider({ children }) {
         if (savedToken) {
           api.get('/auth/me')
             .then((res) => {
-              setUser(res.data);
-              localStorage.setItem('user', JSON.stringify(res.data));
+              if (isMounted && localStorage.getItem('token')) {
+                setUser(res.data);
+                localStorage.setItem('user', JSON.stringify(res.data));
+              }
             })
             .catch(() => {
               // /auth/me rejected the stored token — clear everything.
-              clearStoredAuthData();
-              setUser(null);
-              setToken(null);
+              if (isMounted) {
+                clearStoredAuthData();
+                setUser(null);
+                setToken(null);
+              }
             })
-            .finally(() => setIsLoading(false));
+            .finally(() => {
+              if (isMounted) setIsLoading(false);
+            });
         } else {
           setIsLoading(false);
         }
       }).catch((err) => {
         console.warn('[Supabase session check]', err);
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (!isMounted) return;
         if (event === 'SIGNED_IN' && session) {
           const supabaseToken = session.access_token;
           const u = session.user;
@@ -132,21 +161,28 @@ export function AuthProvider({ children }) {
       if (savedToken) {
         api.get('/auth/me')
           .then((res) => {
-            setUser(res.data);
-            localStorage.setItem('user', JSON.stringify(res.data));
+            if (isMounted && localStorage.getItem('token')) {
+              setUser(res.data);
+              localStorage.setItem('user', JSON.stringify(res.data));
+            }
           })
           .catch(() => {
-            clearStoredAuthData();
-            setUser(null);
-            setToken(null);
+            if (isMounted) {
+              clearStoredAuthData();
+              setUser(null);
+              setToken(null);
+            }
           })
-          .finally(() => setIsLoading(false));
+          .finally(() => {
+            if (isMounted) setIsLoading(false);
+          });
       } else {
         setIsLoading(false);
       }
     }
 
     return () => {
+      isMounted = false;
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
       if (unsub) unsub();
     };
@@ -173,19 +209,7 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    if (supabase) {
-      try {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          console.error('[Supabase signOut error]', error);
-        }
-      } catch (err) {
-        console.error('[Supabase signOut exception]', err);
-      }
-    }
-    clearStoredAuthData();
-    setUser(null);
-    setToken(null);
+    await performLogout(supabase, setUser, setToken);
   };
 
   const updateUser = (updatedData) => {
@@ -238,4 +262,4 @@ export function useAuth() {
   return context;
 }
 
-export { getUserRole, getRoleBadgeStyle, getRoleAccessLevel };
+export { clearStoredAuthData, performLogout, getUserRole, getRoleBadgeStyle, getRoleAccessLevel };

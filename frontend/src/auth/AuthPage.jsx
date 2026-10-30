@@ -208,7 +208,7 @@ export function AuthPage({ onAuthSuccess }) {
     }
 
     try {
-      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: providerKey === 'google' ? 'google' : providerKey,
         options: {
           redirectTo: `${window.location.origin}/`,

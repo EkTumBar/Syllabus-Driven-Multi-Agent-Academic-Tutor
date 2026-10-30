@@ -1,1 +1,1 @@
-export { useAuth, AuthProvider } from './useAuth.jsx';
+export * from './useAuth.jsx';
