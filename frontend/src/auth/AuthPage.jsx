@@ -212,6 +212,7 @@ export function AuthPage({ onAuthSuccess }) {
         provider: providerKey === 'google' ? 'google' : providerKey,
         options: {
           redirectTo: `${window.location.origin}/`,
+          queryParams: providerKey === 'google' ? { prompt: 'select_account' } : undefined,
         },
       });
 

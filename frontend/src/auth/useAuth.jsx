@@ -15,11 +15,32 @@ export function AuthProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const handleUnauthorized = () => {
-      setUser(null);
-      setToken(null);
+    const clearStoredAuthData = () => {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      try {
+        Object.keys(localStorage).forEach((key) => {
+          if (key.startsWith('sb-')) {
+            localStorage.removeItem(key);
+          }
+        });
+      } catch (err) {
+        console.warn('[LocalStorage clear error]', err);
+      }
+      sessionStorage.clear();
+      if (typeof document !== 'undefined' && document.cookie) {
+        document.cookie.split(';').forEach((c) => {
+          document.cookie = c
+            .replace(/^ +/, '')
+            .replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+        });
+      }
+    };
+
+    const handleUnauthorized = () => {
+      clearStoredAuthData();
+      setUser(null);
+      setToken(null);
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
@@ -62,10 +83,9 @@ export function AuthProvider({ children }) {
             })
             .catch(() => {
               // /auth/me rejected the stored token — clear everything.
+              clearStoredAuthData();
               setUser(null);
               setToken(null);
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
             })
             .finally(() => setIsLoading(false));
         } else {
@@ -95,10 +115,9 @@ export function AuthProvider({ children }) {
           setToken(supabaseToken);
           setUser(mapped);
         } else if (event === 'SIGNED_OUT') {
+          clearStoredAuthData();
           setUser(null);
           setToken(null);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
         } else if (event === 'TOKEN_REFRESHED' && session) {
           // Keep localStorage in sync with the refreshed Supabase access token
           localStorage.setItem('token', session.access_token);
@@ -117,10 +136,9 @@ export function AuthProvider({ children }) {
             localStorage.setItem('user', JSON.stringify(res.data));
           })
           .catch(() => {
+            clearStoredAuthData();
             setUser(null);
             setToken(null);
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
           })
           .finally(() => setIsLoading(false));
       } else {
@@ -154,17 +172,18 @@ export function AuthProvider({ children }) {
     return userData;
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    sessionStorage.clear();
-    if (typeof document !== 'undefined' && document.cookie) {
-      document.cookie.split(';').forEach((c) => {
-        document.cookie = c
-          .replace(/^ +/, '')
-          .replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
-      });
+  const logout = async () => {
+    if (supabase) {
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('[Supabase signOut error]', error);
+        }
+      } catch (err) {
+        console.error('[Supabase signOut exception]', err);
+      }
     }
+    clearStoredAuthData();
     setUser(null);
     setToken(null);
   };

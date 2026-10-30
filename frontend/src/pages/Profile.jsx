@@ -413,8 +413,8 @@ export const Profile = () => {
     if (isLoggedInSession) {
       setIsLoggedInSession(false);
       showToast('You have been logged out of this session.');
-      setTimeout(() => {
-        logout();
+      setTimeout(async () => {
+        await logout();
         navigate('/auth', { replace: true });
       }, 600);
     } else {
@@ -429,15 +429,15 @@ export const Profile = () => {
     try {
       await api.delete('/profile/me');
       showToast('Your account has been permanently deleted.');
-      setTimeout(() => {
-        logout();
+      setTimeout(async () => {
+        await logout();
         navigate('/auth', { replace: true });
       }, 800);
     } catch {
       showToast('Account scheduled for deletion.');
       setIsDeleteModalOpen(false);
-      setTimeout(() => {
-        logout();
+      setTimeout(async () => {
+        await logout();
         navigate('/auth', { replace: true });
       }, 800);
     } finally {
